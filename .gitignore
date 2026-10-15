@@ -1,0 +1,27 @@
+# --- secrets: NEVER commit these -------------------------------------------
+auth.json
+auth.json.*
+*_auth.json
+cookie*.txt
+*.token
+
+# --- game data: copyrighted, must be patched locally by each user ----------
+data.win
+data.win.*
+data_patched.win
+*.win
+qqmusic_cache/
+*.ogg
+*.mp3
+
+# --- runtime junk ----------------------------------------------------------
+cache/
+__pycache__/
+*.py[cod]
+*.log
+*.log.*
+logs/
+
+# --- upstream tooling, downloaded by the user ------------------------------
+tools/utmt-cli/
+UndertaleModCli.exe
