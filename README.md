@@ -3,8 +3,6 @@
 在 **ChillPulse** 游戏内的音乐面板里直接播放 **QQ 音乐**：搜索歌曲、播放自建歌单、
 绿钻曲目，界面和游戏原版完全一体，不用切窗口。
 
-> 本仓库**不包含任何游戏素材**（没有 `data.win`、没有音频文件），
-> 补丁需要你自己对正版游戏打一次。
 
 ---
 
@@ -22,8 +20,8 @@
 | **向后预热** | 自动预取后面 3 首，顺序听歌单基本无缝衔接 |
 | **补丁自愈** | Steam 「验证游戏文件完整性」或更新后 `data.win` 被还原时，启动时自动修复 |
 
-**原理**（一句话）：游戏通过 `127.0.0.1:38612` 问本地桥接服务要歌，桥接去 QQ 音乐取直链、
-下载、用 ffmpeg 转成 ogg，游戏再用 `audio_create_stream` 流式播放。桥接只监听本机，不对外。
+**原理**：游戏通过 `127.0.0.1:38612` 问本地桥接服务要歌，桥接去 QQ 音乐取直链、
+下载、用 ffmpeg 转成 ogg，游戏再用 `audio_create_stream` 流式播放。
 
 ---
 
@@ -75,8 +73,6 @@ UndertaleModCli.exe load "<游戏目录>\data.win" -s mod\apply_mod.csx -o data_
 powershell -ExecutionPolicy Bypass -File mod\install_mod.ps1
 ```
 
-补丁脚本在锚点对不上时会**直接报错退出** —— 这说明游戏更新了，需要按新版本重新适配。
-
 ### 4. 启动
 
 ```powershell
@@ -89,30 +85,8 @@ bridge\start_bridge.bat          # 起桥接服务（保持窗口开着）
 
 ---
 
-## 常见问题
 
-| 现象 | 处理 |
-| --- | --- |
-| 面板显示**未登录** | 桥接没在跑，或 Cookie 过期。访问 `http://127.0.0.1:38612/status` 确认 |
-| 点歌**没声音** | 首次播放要下载+转码，8～25 秒（CDN 速度决定）；面板会显示「加载中…」。播过一次就有缓存 |
-| **QQ音乐标签不见了** | Steam 还原了 `data.win`。双击 `mod\reinstall_mod.bat` 即可恢复（守卫脚本也会自动修） |
-| 游戏更新后补丁失效 | 原版 `data.win` 变了，需要重新适配补丁 —— 提 issue |
-| Steam 卡在**「正在停止」** | 这个游戏自身的 Steam 记录问题（无 mod 也一样），重启 Steam 即可 |
-| Steam **连不上网** | 本地代理（Clash 等）拦了 `*.steamserver.net`，见 `docs/troubleshooting.md` |
-
-更多排错：**[docs/troubleshooting.md](docs/troubleshooting.md)**
 
 ---
 
-## English
 
-A mod that brings **QQ Music** into **ChillPulse**'s own in-game music panel:
-search, your playlists and VIP playback, with the original UI look. A small
-local bridge (`127.0.0.1:38612`, loopback only) resolves the stream URLs,
-downloads and transcodes to ogg with ffmpeg; the patched game streams them with
-`audio_create_stream`.
-
-*No game data is distributed here* — you patch your own copy with
-UndertaleModTool (see step 3 above). Requires Python 3.9+, ffmpeg, and a
-QQ Music account (a login cookie for VIP tracks). Not affiliated with
-catosgame or Tencent. MIT licensed.
