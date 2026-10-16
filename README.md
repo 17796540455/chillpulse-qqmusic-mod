@@ -25,58 +25,28 @@
 
 ## 安装
 
-### 0. 前置要求
+### 一键安装（推荐）
 
-| 需要 | 说明 |
+1. 下载本仓库：右上角 **Code → Download ZIP**，解压到任意目录（例如 `E:\ChillPulseQQMod\`）
+2. **双击 `install.bat`**
+3. 按提示走完
+
+脚本会自动做完这些事：
+
+| 步骤 | 说明 |
 | --- | --- |
-| Windows + 正版游戏 | Steam 库里的 **ChillPulse**（AppID `2826180`） |
-| **Python 3.9+** | <https://www.python.org/downloads/>（安装时勾选 Add to PATH） |
-| **ffmpeg** | `winget install Gyan.FFmpeg` |
-| QQ 音乐账号 | 播绿钻歌曲需要登录（免费歌曲不登录也能放） |
+| 找游戏目录 | 读 Steam 注册表 + `libraryfolders.vdf`；找不到会问你 |
+| 检查依赖 | Python 3 与 ffmpeg；ffmpeg 缺失时可直接用 winget 装 |
+| 下载打补丁工具 | UndertaleModTool CLI，约 100 MB，只下载一次 |
+| 备份 + 打补丁 | 保留 `data.win.qqmod-backup`（随时可还原），再写入补丁 |
+| 同步校验值 | 更新 `mod_guard.py`，以后 Steam 还原文件时能自动修回 |
+| 登录 QQ 音乐 | 起一次桥接并**自动打开登录页**，扫码即可 |
 
-### 1. 放置文件
-
-把 `bridge/` 和 `mod/` 两个目录放到同一个文件夹里，例如：
-
-```
-E:\ChillPulseQQMod\
-    bridge\     qqbridge.py  qqmusic.py  start_bridge.bat
-    mod\        gml_Script_qqm_mod.gml  apply_mod.csx  install_mod.ps1  ...
-```
-
-### 2. 登录 QQ 音乐
-
-浏览器打开 <http://127.0.0.1:38612/login> 扫码，或手动写 `bridge/auth.json`：
-
-```json
-{ "uin": "你的QQ号", "cookie": "qm_keyst=...; qqmusic_key=..." }
-```
-
-> 只需 `qm_keyst` / `qqmusic_key` 就够（绿钻可播）。Cookie 有效期通常几天，
-> 过期后播放会退回只能听免费歌曲，重新粘贴即可。
-
-### 3. 给游戏打补丁
-
-补丁需要 [UndertaleModTool](https://github.com/UndertaleModTool/UndertaleModTool/releases)
-的**命令行版**（`UndertaleModCli.exe`）：
-
-```powershell
-# 1) 备份原版
-copy "<游戏目录>\data.win" "<游戏目录>\data.win.qqmod-backup"
-
-# 2) 应用补丁
-UndertaleModCli.exe load "<游戏目录>\data.win" -s mod\apply_mod.csx -o data_patched.win
-
-# 3) 装进游戏（会保留一份原版备份，可随时卸载）
-powershell -ExecutionPolicy Bypass -File mod\install_mod.ps1
-```
-
-### 4. 启动
+**完成后的日常用法**：
 
 ```powershell
 bridge\start_bridge.bat          # 起桥接服务（保持窗口开着）
 # 然后正常启动游戏 → 点左下角 ≡ → 「QQ音乐」
-```
 
 想要**自动启动**（推荐）：`mod\launcher\` 里的启动器可让桥接随游戏会话起停，
 或用 `mod\install_autostart.ps1` 做登录自启。
