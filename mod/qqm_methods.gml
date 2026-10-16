@@ -1534,32 +1534,8 @@ qqm_draw_body = function()
         }
 
         // ---- 队列 (now playing / play queue) ----
-        if (button_collision(163, _sub_y1, 223, _sub_y2))
-        {
-            draw_set_alpha(0.35);
-            draw_roundrect(163, _sub_y1, 223, _sub_y2, false);
-            draw_set_alpha(1);
-        }
-        else
-        {
-            draw_set_alpha(qqm_view == 3 ? 0.3 : 0.15);
-            draw_roundrect(163, _sub_y1, 223, _sub_y2, false);
-            draw_set_alpha(1);
-        }
-        draw_text_transformed(193, 402, qqm_text("queue"), 0.28, 0.28, 0);
-        if (button_click(163, _sub_y1, 223, _sub_y2))
-        {
-            qqm_view = 3;
-            var _qn = array_length(qqm_queue);
-            if (_qn > 0 && qqm_play_index >= 0)
-            {
-                qqm_scroll = clamp(qqm_play_index - 2, 0, max(0, _qn - qqm_rows));
-            }
-            else
-            {
-                qqm_scroll = 0;
-            }
-        }
+        // The queue used to have a sub tab here as well; it is now the
+        // top-level 播放列表 tab, so there is only one queue in the panel.
 
         // status / list name
         draw_set_halign(fa_left);
