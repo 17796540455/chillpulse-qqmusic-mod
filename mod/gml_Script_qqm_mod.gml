@@ -333,80 +333,56 @@ function qqm_play_at(_i)
         // (c) another queue is playing: splice this playlist in behind the
         //     playing song and jump to the clicked track
         var _cur = qqm_play_index;
-        var _seen = [];
-        for (var a = 0; a < _have; a++)
+        if (_cur < 0 || _cur >= _have)
         {
-            array_push(_seen, string(qqm_queue[a].id));
+            _cur = -1;
         }
-        if (array_contains(_seen, _tid))
+        var _current_id = "";
+        if (_cur >= 0)
         {
-            // it is already queued somewhere: jump there rather than duplicating
-            for (var a2 = 0; a2 < _have; a2++)
+            _current_id = string(qqm_queue[_cur].id);
+        }
+        // Move overlapping songs into the inserted playlist, keeping the
+        // playing song in place and each incoming song only once.
+        var _incoming = [];
+        var _seen = [];
+        for (var a = 0; a < array_length(qqm_tracks); a++)
+        {
+            var _incoming_id = string(qqm_tracks[a].id);
+            if (_incoming_id != _current_id && !array_contains(_seen, _incoming_id))
             {
-                if (string(qqm_queue[a2].id) == _tid)
-                {
-                    qqm_play_from_queue(a2);
-                    return;
-                }
+                array_push(_incoming, qqm_tracks[a]);
+                array_push(_seen, _incoming_id);
             }
         }
         var _newq = [];
         var _at = 0;
-        var _done = 0;
-        for (var b = 0; b < _have; b++)
+        // b == -1 also handles an inactive queue: insert before its first row.
+        for (var b = -1; b < _have; b++)
         {
-            array_push(_newq, qqm_queue[b]);
-            if (_done == 0 && b == _cur)
+            if (b >= 0)
             {
-                for (var c = 0; c < array_length(qqm_tracks); c++)
+                var _old_id = string(qqm_queue[b].id);
+                if (b == _cur || !array_contains(_seen, _old_id))
                 {
-                    var _cm = string(qqm_tracks[c].id);
-                    if (array_contains(_seen, _cm))
-                    {
-                        continue;                   // already queued, do not duplicate
-                    }
-                    if (c == _i)
+                    if (_old_id == _tid)
                     {
                         _at = array_length(_newq);
                     }
-                    array_push(_newq, qqm_tracks[c]);
-                    array_push(_seen, _cm);
+                    array_push(_newq, qqm_queue[b]);
                 }
-                _done = 1;
             }
-        }
-        if (_done == 0)
-        {
-            // No playable position (nothing playing, or the playhead is stale):
-            // the playlist goes in FRONT of whatever is queued - the comment
-            // always said so, but the code used to append it to the end.
-            var _front = [];
-            var _fat = 0;
-            for (var c2 = 0; c2 < array_length(qqm_tracks); c2++)
+            if (b == _cur)
             {
-                var _cm2 = string(qqm_tracks[c2].id);
-                if (array_contains(_seen, _cm2))
+                for (var c = 0; c < array_length(_incoming); c++)
                 {
-                    continue;
+                    if (string(_incoming[c].id) == _tid)
+                    {
+                        _at = array_length(_newq);
+                    }
+                    array_push(_newq, _incoming[c]);
                 }
-                if (c2 == _i)
-                {
-                    _fat = array_length(_front);
-                }
-                array_push(_front, qqm_tracks[c2]);
-                array_push(_seen, _cm2);
             }
-            var _tail = _newq;
-            _newq = [];
-            for (var d = 0; d < array_length(_front); d++)
-            {
-                array_push(_newq, _front[d]);
-            }
-            for (var e = 0; e < array_length(_tail); e++)
-            {
-                array_push(_newq, _tail[e]);
-            }
-            _at = _fat;
         }
         qqm_queue = _newq;
         qqm_queue_name = qqm_pl_name;
@@ -879,7 +855,7 @@ function qqm_async_body(_map)
             qqm_pl_name = _j.name;
             qqm_view = 1;
             qqm_scroll = 0;
-            qqm_play_index = -1;
+            // Preserve the active playback position while browsing.
             qqm_list_is_queue = 0;
             qqm_list_kind = "playlist";
             qqm_status = "";
@@ -1350,13 +1326,13 @@ function qqm_draw_tabs()
 
     // ---- bridge / login hint at the right of the tab row ----
     draw_set_halign(fa_right);
-    if (qqm_ready == -1)
+    if (qqm_open == 1 && qqm_ready == -1)
     {
         draw_set_color(c_red);
         draw_text_transformed(392, 379, qqm_text("offline"), 0.22, 0.22, 0);
         draw_set_color(c_white);
     }
-    else if (qqm_logged == 0 && qqm_view != 0 && qqm_saw_status == 1)
+    else if (qqm_open == 1 && qqm_ready == 1 && qqm_logged == 0 && qqm_saw_status == 1)
     {
         draw_set_alpha(0.7);
         draw_text_transformed(392, 379, qqm_text("nologin"), 0.22, 0.22, 0);

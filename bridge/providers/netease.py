@@ -18,12 +18,15 @@ normalised here into the QQ-shaped keys the bridge already understands.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from ._aes import encrypt as _aes_encrypt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BRIDGE_DIR = os.path.dirname(HERE)
@@ -82,6 +85,38 @@ def _api(path: str, params: dict, timeout: int = TIMEOUT):
         return json.loads(body)
     except ValueError as exc:
         raise BridgeError("网易云返回了无法解析的内容") from exc
+
+
+def _playback_api(params: dict, timeout: int = TIMEOUT) -> dict:
+    """Use the authenticated client protocol to obtain CDN-valid play URLs.
+
+    The plain web endpoint can return code=200 with a URL the CDN rejects.
+    EAPI changes the request encoding; account playback permissions still apply.
+    """
+    path = "/api/song/enhance/player/url/v1"
+    text = json.dumps(params, separators=(",", ":"), ensure_ascii=False)
+    digest = hashlib.md5(("nobody" + path + "use" + text + "md5forencrypt").encode("utf-8")).hexdigest()
+    plaintext = (path + "-36cd479b6b5-" + text + "-36cd479b6b5-" + digest).encode("utf-8")
+    encrypted = _aes_encrypt(plaintext, b"e82ckenh8dichen8").hex().upper()
+    # Set the client fields for this request without changing the stored login.
+    cookies = [part.strip() for part in _cookie().split(";") if part.strip()
+               and part.split("=", 1)[0].strip().lower() not in ("os", "appver")]
+    cookies.extend(("os=pc", "appver=3.1.17.204416"))
+    req = urllib.request.Request(
+        "https://interface3.music.163.com/eapi/song/enhance/player/url/v1",
+        data=urllib.parse.urlencode({"params": encrypted}).encode("ascii"),
+        headers={"User-Agent": UA, "Referer": BASE + "/",
+                 "Cookie": "; ".join(cookies),
+                 "Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with _opener().open(req, timeout=timeout) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise BridgeError(f"网易云播放接口返回 HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise BridgeError("无法连接网易云播放接口") from exc
+    except ValueError as exc:
+        raise BridgeError("网易云播放接口返回了无法解析的内容") from exc
 
 
 # --------------------------------------------------------------------------
@@ -223,15 +258,18 @@ def song_url_ex(mid: str, quality: str = "128", uin: str = "0",
     inner code is -110 and ``url`` is empty; the bridge turns that into a clear
     message rather than a generic failure.
     """
+    if not str(mid).isdigit():
+        raise BridgeError("网易云歌曲 ID 无效")
     level = LEVELS.get(str(quality), DEFAULT_LEVEL)
-    j = _api("/api/song/enhance/player/url/v1",
-             {"ids": f"[{mid}]", "level": level, "encodeType": "mp3"},
-             timeout=timeout)
+    j = _playback_api({"ids": f"[{mid}]", "level": level, "encodeType": "flac"},
+                      timeout=timeout)
     data = j.get("data") or [{}]
     d = data[0] if isinstance(data, list) and data else {}
     url = d.get("url") or ""
     inner = d.get("code")
-    if url:
+    if d.get("freeTrialInfo"):
+        raise BridgeError("该歌曲仅提供试听片段，当前账号没有完整播放权限")
+    if url and inner == 200:
         return {"url": url, "purl": url, "result": inner, "code": j.get("code"),
                 "filename": f"{mid}.mp3", "quality": level,
                 "sip": urllib.parse.urlparse(url).netloc, "br": d.get("br"),
@@ -243,10 +281,7 @@ def song_url_ex(mid: str, quality: str = "128", uin: str = "0",
     if inner == -110 or inner == -460:
         if not _cookie():
             raise BridgeError("该歌曲需要网易云登录")
-        raise BridgeError("该歌曲需要网易云会员或已下架")
-    trial = d.get("freeTrialInfo")
-    if trial:
-        raise BridgeError("该歌曲仅提供试听片段（需要会员）")
+        raise BridgeError(f"网易云未授予播放权限（code={inner}），请在官方客户端确认歌曲可播放并检查登录状态")
     raise BridgeError(f"网易云未返回播放地址（code={inner}）")
 
 

@@ -1,7 +1,9 @@
 # ChillPulse QQ Music Mod
 
-在 **ChillPulse** 游戏内的音乐面板里直接播放 **QQ 音乐**：搜索歌曲、播放自建歌单。
+在 **ChillPulse** 游戏内的音乐面板里直接播放 **QQ 音乐和网易云音乐**：搜索歌曲、播放自建歌单。
 
+
+本次修复网易云部分歌曲的 HTTP 403、试听权限提示，以及本地面板提示和歌单插队位置；验证方式见[修复说明](docs/netease-playback-fix.md)。
 
 ---
 
@@ -46,9 +48,10 @@
 
 ```powershell
 bridge\start_bridge.bat          # 起桥接服务（保持窗口开着）
-# 然后正常启动游戏 → 点左下角 ≡ → 「QQ音乐」
+# 然后正常启动游戏 → 点左下角 ≡ → 「QQ音乐」或「网易云音乐」
+```
 
-想要**自动启动**（推荐）：`mod\launcher\` 里的启动器可让桥接随游戏会话起停，
+想要**自动启动**（推荐）：`launcher\` 里的启动器可让桥接随游戏会话起停，
 或用 `mod\install_autostart.ps1` 做登录自启。
 
 

@@ -1,6 +1,8 @@
 # --- secrets: NEVER commit these -------------------------------------------
 auth.json
 auth.json.*
+auth_*.json
+auth_*.json.*
 *_auth.json
 cookie*.txt
 *.token

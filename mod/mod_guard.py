@@ -1,4 +1,4 @@
-﻿"""Keep the patched data.win in place.
+"""Keep the patched data.win in place.
 
 Steam restores `data.win` to the vanilla build whenever it verifies the game
 files or downloads an update, which silently removes the QQ Music tab.  This
@@ -31,7 +31,7 @@ GAME_DIR_FILE = os.path.join(HERE, "game_dir.txt")
 DEFAULT_GAME_DIR = r"E:\steam\steam\steamapps\common\ChillPulse"
 
 VANILLA_SHA256 = "853f3a5bcbe37e43fd42e814dcf313021313f8ec1723c13c744dc7e78de95c7f"
-PATCHED_SHA256 = "5179154f8bf3926614f17de1a36ec12270d97b96ecde1b834b3059d216bf636d"
+PATCHED_SHA256 = "c7e8ed540db9358ecceb59649de0ab6b54122964b66f8438e7131ee0c771e566"
 
 
 def game_dir() -> str:
