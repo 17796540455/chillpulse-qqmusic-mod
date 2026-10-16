@@ -183,14 +183,24 @@ def playlists(uid: str = "") -> list:
     return out
 
 
-def playlist(pid: str, count: int = 1000) -> dict:
-    j = _api("/api/v6/playlist/detail", {"id": pid, "n": max(1, int(count))})
+def playlist(pid: str, offset: int = 0, count: int = 1000) -> dict:
+    """Playlist detail.
+
+    The positional shape matches qqmusic.playlist_detail(disstid, offset, count)
+    because the bridge calls providers that way - getting this wrong made every
+    playlist return exactly one track (offset 0 was read as the count).
+    """
+    # ask NetEase for the whole list in one go, then slice here
+    j = _api("/api/v6/playlist/detail", {"id": pid, "n": 1000})
     pl = j.get("playlist") or {}
     if not pl:
         raise BridgeError("网易云歌单不存在或不可访问")
-    tracks = [_track(t) for t in (pl.get("tracks") or [])]
-    return {"name": pl.get("name") or "", "total": int(pl.get("trackCount") or len(tracks)),
-            "tracks": tracks}
+    all_tracks = [_track(t) for t in (pl.get("tracks") or [])]
+    total = int(pl.get("trackCount") or len(all_tracks))
+    start = max(0, int(offset or 0))
+    want = max(1, int(count or 1000))
+    return {"name": pl.get("name") or "", "total": total,
+            "tracks": all_tracks[start:start + want]}
 
 
 def song_url_ex(mid: str, quality: str = "128", uin: str = "0",
