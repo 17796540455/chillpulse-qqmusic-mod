@@ -39,7 +39,12 @@ function qqm_init()
     qqm_play_index   = -1;
     qqm_play_frames  = 0;
     qqm_sound        = -1;
+    qqm_voice        = -1;    // playing instance; qqm_sound is the stream resource
     qqm_playing      = 1;
+    qqm_last_mode    = music_mode;
+    qqm_shuffle_ids  = [];
+    qqm_shuffle_order = [];
+    qqm_shuffle_pos  = -1;
     qqm_poll         = 0;
 
     qqm_ready        = 0;      // 0 unknown, 1 bridge reachable, -1 not reachable
@@ -111,11 +116,13 @@ function qqm_init()
         if (global.qqm_stream != -1)
         {
             qqm_sound = global.qqm_stream;
+            qqm_voice = variable_global_exists("qqm_voice") ? global.qqm_voice : qqm_sound;
             qqm_play_state = "playing";
             qqm_play_title = "QQ音乐";
         }
     }
     global.qqm_stream = qqm_sound;
+    global.qqm_voice = qqm_voice;
 }
 
 /// @description Localised UI labels (Chinese for the CJK languages, English otherwise).
@@ -325,11 +332,13 @@ function qqm_stop()
 {
     if (qqm_sound != -1)
     {
-        audio_stop_sound(qqm_sound);
+        audio_stop_sound(qqm_voice);
         audio_destroy_stream(qqm_sound);
         qqm_sound = -1;
     }
     global.qqm_stream = -1;
+    qqm_voice = -1;
+    global.qqm_voice = -1;
     qqm_pending_play = -1;
     qqm_play_state = "";
     qqm_play_file = "";
@@ -516,26 +525,117 @@ function qqm_try_send_play()
     }
 }
 
-/// @description Move the play position by _d tracks through the play queue.
-function qqm_shift(_d)
+/// @description The stock mode button is shared by local and online music.
+function qqm_sync_mode()
 {
+    if (qqm_last_mode != music_mode)
+    {
+        qqm_shuffle_ids = [];
+        qqm_shuffle_order = [];
+        qqm_shuffle_pos = -1;
+        qqm_last_mode = music_mode;
+    }
+}
+
+/// @description Move through the queue; only natural completion repeats one song.
+function qqm_shift(_d, _automatic = false)
+{
+    qqm_sync_mode();
     var _n = array_length(qqm_queue);
     if (_n == 0)
     {
         return;
     }
+    if (_automatic && music_mode == 1 && qqm_play_file != "")
+    {
+        qqm_start_stream(qqm_play_file);
+        return;
+    }
     if (_n == 1)
     {
-        // a single song was queued (picked out of the search results)
-        qqm_status = qqm_text("only_one");
+        if (qqm_play_index == 0 && string(qqm_queue[0].id) == qqm_play_id && qqm_play_file != "")
+        {
+            qqm_start_stream(qqm_play_file);
+        }
+        else
+        {
+            qqm_play_from_queue(0);
+        }
         return;
     }
     var _i = qqm_play_index;
-    if (_i < 0)
+    if (music_mode == 2)
     {
-        _i = 0;
+        var _valid = (array_length(qqm_shuffle_ids) == _n
+                      && array_length(qqm_shuffle_order) == _n
+                      && qqm_shuffle_pos >= 0 && qqm_shuffle_pos < _n);
+        if (_valid)
+        {
+            _valid = (qqm_shuffle_order[qqm_shuffle_pos] == _i);
+            for (var _k = 0; _k < _n && _valid; _k += 1)
+            {
+                _valid = (qqm_shuffle_ids[_k] == string(qqm_queue[_k].id));
+            }
+        }
+        if (!_valid)
+        {
+            qqm_shuffle_ids = [];
+            var _remaining = [];
+            for (var _k = 0; _k < _n; _k += 1)
+            {
+                array_push(qqm_shuffle_ids, string(qqm_queue[_k].id));
+                if (_k != _i)
+                {
+                    array_push(_remaining, _k);
+                }
+            }
+            _remaining = array_shuffle(_remaining);
+            qqm_shuffle_order = [];
+            if (_i >= 0 && _i < _n)
+            {
+                array_push(qqm_shuffle_order, _i);
+            }
+            for (var _k = 0; _k < array_length(_remaining); _k += 1)
+            {
+                array_push(qqm_shuffle_order, _remaining[_k]);
+            }
+            qqm_shuffle_pos = (_i >= 0 && _i < _n) ? 0 : -1;
+        }
+        if (_d < 0)
+        {
+            qqm_shuffle_pos = max(0, qqm_shuffle_pos - 1);
+        }
+        else if (qqm_shuffle_pos + 1 < _n)
+        {
+            qqm_shuffle_pos += 1;
+        }
+        else
+        {
+            // A new shuffled round, without repeating the song just finished.
+            qqm_shuffle_order = [];
+            for (var _k = 0; _k < _n; _k += 1)
+            {
+                array_push(qqm_shuffle_order, _k);
+            }
+            qqm_shuffle_order = array_shuffle(qqm_shuffle_order);
+            if (qqm_shuffle_order[0] == _i)
+            {
+                var _swap = qqm_shuffle_order[0];
+                qqm_shuffle_order[0] = qqm_shuffle_order[1];
+                qqm_shuffle_order[1] = _swap;
+            }
+            qqm_shuffle_pos = 0;
+        }
+        _i = qqm_shuffle_order[qqm_shuffle_pos];
     }
-    _i += _d;
+    else if (_i < 0 || _i >= _n)
+    {
+        _i = (_d < 0) ? _n - 1 : 0;
+    }
+    else
+    {
+        _i += _d;
+    }
     if (_i < 0)
     {
         _i = _n - 1;
@@ -644,6 +744,7 @@ function qqm_step_body()
     }
     if (_on)
     {
+        qqm_sync_mode();
         var _mx = device_mouse_x_to_gui(0);
         var _my = device_mouse_y_to_gui(0);
         // The player bar sits at y 660-700 and never overlaps the music panel
@@ -665,24 +766,24 @@ function qqm_step_body()
         }
         if (qqm_sound != -1)
         {
-            audio_sound_gain(qqm_sound, slider_x / 100, 10);
+            audio_sound_gain(qqm_voice, clamp(slider_x, 0, 100) / 100, 0);
             if (music_playing == -1 && qqm_playing == 1)
             {
-                audio_pause_sound(qqm_sound);
+                audio_pause_sound(qqm_voice);
                 qqm_playing = -1;
             }
             else if (music_playing == 1 && qqm_playing == -1)
             {
-                audio_resume_sound(qqm_sound);
+                audio_resume_sound(qqm_voice);
                 qqm_playing = 1;
             }
             if (qqm_play_frames > 0)
             {
                 qqm_play_frames -= 1;
             }
-            else if (music_playing == 1 && !audio_is_playing(qqm_sound))
+            else if (music_playing == 1 && !audio_is_playing(qqm_voice))
             {
-                qqm_shift(1);
+                qqm_shift(1, true);
             }
         }
     }
@@ -1039,10 +1140,13 @@ function qqm_start_stream(_file)
 {
     if (qqm_sound != -1)
     {
-        audio_stop_sound(qqm_sound);
+        audio_stop_sound(qqm_voice);
         audio_destroy_stream(qqm_sound);
         qqm_sound = -1;
     }
+    qqm_voice = -1;
+    global.qqm_stream = -1;
+    global.qqm_voice = -1;
     var _rel = string(_file);
     qqm_play_file = _rel;
     // GameMaker resolves streamed audio against the game folder, but a plain
@@ -1082,8 +1186,16 @@ function qqm_start_stream(_file)
         audio_stop_sound(current_music);
     }
     qqm_saved_music = current_music;
-    audio_play_sound(qqm_sound, 99, false);
-    audio_sound_gain(qqm_sound, slider_x / 100, 10);
+    qqm_voice = audio_play_sound(qqm_sound, 99, false, clamp(slider_x, 0, 100) / 100);
+    global.qqm_voice = qqm_voice;
+    if (qqm_voice == -1)
+    {
+        audio_destroy_stream(qqm_sound);
+        qqm_sound = -1;
+        global.qqm_stream = -1;
+        qqm_fail_play(qqm_text("noaudio"));
+        return;
+    }
     qqm_status = "";
     // start warming the tracks that follow this one
     qqm_pf_idx = -1;
