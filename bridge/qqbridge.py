@@ -60,7 +60,7 @@ if HERE not in sys.path:
 urllib.request.install_opener(
     urllib.request.build_opener(urllib.request.ProxyHandler({})))
 
-import qqmusic  # noqa: E402  (local module, same folder)
+import providers as qqmusic  # noqa: E402  (source dispatcher: QQ + NetEase)
 
 VERSION = "1.0"
 DEFAULT_PORT = 38610
@@ -125,7 +125,9 @@ CACHE_MAX_MB = 500                       # ogg cache budget
 CACHE_MAX_FILES = 300                    # ogg cache file budget
 CACHE_KEEP_SECONDS = 600                 # never evict anything this fresh
 EVICT_INTERVAL = 60                      # seconds between eviction sweeps
-MID_RE = re.compile(r"^[A-Za-z0-9_-]{5,64}$")
+#: song ids may carry their source - "ne:347230", "qq:0022QuVR1LcRHN".
+#: A bare id means QQ Music, so an already-patched game keeps working.
+MID_RE = re.compile(r"^(?:(?:qq|ne):)?[A-Za-z0-9_-]{5,64}$")
 FFMPEG_ARGS = ["-c:a", "libvorbis", "-q:a", "4"]
 
 LOG = logging.getLogger("qqbridge")
@@ -288,11 +290,11 @@ def game_cache_dir() -> str:
 
 
 def out_path(mid: str) -> str:
-    return os.path.join(game_cache_dir(), mid + ".ogg")
+    return os.path.join(game_cache_dir(), qqmusic.safe_name(mid) + ".ogg")
 
 
 def rel_path(mid: str) -> str:
-    return f"{OUT_SUBDIR}/{mid}.ogg"
+    return f"{OUT_SUBDIR}/{qqmusic.safe_name(mid)}.ogg"
 
 
 def is_ready(mid: str) -> bool:
@@ -542,7 +544,10 @@ def track_out(raw: dict) -> dict:
     else:
         singer = "/".join(s for s in singers if s)
     return {
-        "id": raw.get("mid") or "",
+        # The id carries its source so that /play, /playstate and /prefetch can
+        # route without any extra parameter; QQ ids stay bare, which keeps an
+        # already-patched game and the existing ogg cache working unchanged.
+        "id": qqmusic.join_id(qqmusic.current_source(), raw.get("mid") or ""),
         "name": raw.get("name") or "",
         "singer": singer,
         "album": raw.get("album") or "",
@@ -1570,6 +1575,7 @@ def api_status(_p: dict):
         # the launcher matches this against the process it spawned, so that a
         # bridge left over from an earlier session is never mistaken for its own
         "pid": os.getpid(),
+        "sources": qqmusic.installed(),
         "logged_in": bool(au["logged_in"]),
         "nickname": au["nickname"],
         "ffmpeg": bool(FFMPEG),
@@ -1583,8 +1589,11 @@ def api_search(p: dict):
         return 200, {"ok": False, "msg": "缺少参数 q", "tracks": []}
     page = _int(p.get("page"), 1, 1, 100)
     num = _int(p.get("n"), 30, 1, 50)
+    qqmusic.set_source(p.get("src"))
+    LOG.info("search src=%s (raw=%r) q=%r", qqmusic.current_source(),
+             p.get("src"), keyword)
 
-    key = (keyword, page, num)
+    key = (qqmusic.current_source(), keyword, page, num)
     now = time.time()
     with SEARCH_LOCK:
         hit = SEARCH_CACHE.get(key)
@@ -1612,8 +1621,10 @@ def api_search(p: dict):
                     for stale in oldest[:16]:
                         SEARCH_CACHE.pop(stale, None)
         else:
-            # last resort: answer from what previous searches/playlists taught us
-            hits = local_search(keyword, num)
+            # last resort: answer from what previous searches/playlists taught us.
+            # QQ only - that cache holds QQ metadata, so serving it for another
+            # source would hand the game tracks from the wrong service.
+            hits = local_search(keyword, num) if qqmusic.current_source() == "qq" else []
             if hits:
                 LOG.warning("search upstream empty for %r; served %d tracks "
                             "from the local metadata cache", keyword, len(hits))
@@ -1647,6 +1658,7 @@ def local_search(keyword: str, num: int) -> list[dict]:
 
 
 def api_playlists(_p: dict):
+    qqmusic.set_source(_p.get("src") if isinstance(_p, dict) else None)
     au = reload_auth()
     if not au["logged_in"]:
         return 200, {"ok": True, "logged_in": False, "playlists": []}
@@ -1679,6 +1691,7 @@ def api_playlists(_p: dict):
 
 
 def api_playlist(p: dict):
+    qqmusic.set_source(p.get("src"))
     playlist_id = (p.get("id") or "").strip()
     if not re.fullmatch(r"\d{1,20}", playlist_id or ""):
         return 200, {"ok": False, "msg": "缺少或非法的歌单 id",
@@ -1979,6 +1992,14 @@ class Handler(BaseHTTPRequestHandler):
                     status, payload, after = result
                 else:
                     status, payload = result
+        except Cancelled:
+            LOG.info("handler cancelled")
+            status, payload = 200, {"ok": False, "msg": "已取消"}
+        except BridgeError as exc:
+            # a provider's own explanation (needs login, needs VIP, ...) is far
+            # more useful to the player than a generic failure
+            LOG.warning("handler rejected: %s", exc)
+            status, payload = 200, {"ok": False, "msg": str(exc) or "请求被拒绝"}
         except Exception as exc:                      # noqa: BLE001
             LOG.exception("handler error: %s", exc)
             status, payload = 200, {"ok": False, "msg": "服务器内部错误"}

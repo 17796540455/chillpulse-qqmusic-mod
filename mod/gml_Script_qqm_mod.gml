@@ -8,7 +8,8 @@ function qqm_init()
 {
     qqm_port         = 38612;
     qqm_base         = "http://127.0.0.1:" + string(qqm_port);
-    qqm_open         = 0;      // 1 = QQ panel shown inside the music panel
+    qqm_open         = 0;      // 0 = 本地音乐, 1 = 在线音乐(QQ/网易云), 2 = 播放列表
+    qqm_source       = "qq";   // 在线视图当前音源: "qq" | "ne"
     qqm_view         = 0;      // 0 = playlists, 1 = tracks, 2 = search
     qqm_rows         = 6;      // rows visible in the panel
     qqm_req          = -1;     // id of the http request in flight
@@ -123,6 +124,8 @@ function qqm_text(_key)
     {
         case "tab_local": return _cn ? "本地音乐" : "Local";
         case "tab_qq":    return "QQ音乐";
+        case "tab_ne":    return "网易云音乐";
+        case "tab_queue": return _cn ? "播放列表" : "Queue";
         case "playlist":  return _cn ? "歌单" : "Lists";
         case "queue":     return _cn ? "队列" : "Queue";
         case "reordered": return _cn ? "已调整顺序" : "Reordered";
@@ -252,6 +255,15 @@ function qqm_get(_path, _kind)
     }
     qqm_kind = _kind;
     qqm_req_life = 0;
+    // List requests have to say which service they are for.  The id-carrying
+    // ones (/play, /playstate, /prefetch, /status) are left alone - they carry
+    // the source in the id prefix instead.
+    //   "/search?..." -> "/search?"   "/playlists" and "/playlist?id=..." -> "/playlis"
+    var _head = string_copy(_path, 1, 8);
+    if (_head == "/search?" || _head == "/playlis")
+    {
+        _path += "&src=" + qqm_source;
+    }
     qqm_req = http_get(qqm_base + _path);
     return 1;
 }
@@ -1237,12 +1249,12 @@ function qqm_draw_tabs()
     draw_set_alpha(1);
 
     // ---- 本地音乐 ----
-    if (button_collision(35, 365, 115, 389))
+    if (button_collision(30, 365, 106, 389))
     {
         draw_set_alpha(0.25);
-        draw_roundrect(35, 365, 115, 389, false);
+        draw_roundrect(30, 365, 106, 389, false);
         draw_set_alpha(1);
-        if (button_click(35, 365, 115, 389))
+        if (button_click(30, 365, 106, 389))
         {
             qqm_open = 0;
             qqm_search_focus = 0;
@@ -1252,35 +1264,73 @@ function qqm_draw_tabs()
     else if (qqm_open == 0)
     {
         draw_set_alpha(0.35);
-        draw_roundrect(35, 365, 115, 389, false);
+        draw_roundrect(30, 365, 106, 389, false);
+        draw_set_alpha(1);
+    }
+    draw_text_transformed(68, 379, qqm_text("tab_local"), 0.3, 0.3, 0);
+
+    // ---- QQ音乐 与 网易云音乐：同一套在线视图，靠 qqm_source 区分 ----
+    var _tabs = [[110, 186, "qq", qqm_text("tab_qq")], [190, 282, "ne", qqm_text("tab_ne")]];
+    for (var _ti = 0; _ti < 2; _ti++)
+    {
+        var _x0 = _tabs[_ti][0];
+        var _x1 = _tabs[_ti][1];
+        var _src = _tabs[_ti][2];
+        if (button_collision(_x0, 365, _x1, 389))
+        {
+            draw_set_alpha(0.25);
+            draw_roundrect(_x0, 365, _x1, 389, false);
+            draw_set_alpha(1);
+            if (button_click(_x0, 365, _x1, 389))
+            {
+                qqm_open = 1;
+                if (qqm_source != _src)
+                {
+                    // switching service: the old list and its queue position go away
+                    qqm_source = _src;
+                    qqm_tracks = [];
+                    qqm_list_kind = "";
+                    qqm_view = 0;
+                    qqm_hovered = -1;
+                }
+                if (qqm_ready == 0)
+                {
+                    qqm_status = qqm_text("loading");
+                    qqm_get("/status", "status");
+                }
+            }
+        }
+        else if (qqm_open == 1 && qqm_source == _src)
+        {
+            draw_set_alpha(0.35);
+            draw_roundrect(_x0, 365, _x1, 389, false);
+            draw_set_alpha(1);
+        }
+        draw_set_color(c_white);
+        draw_text_transformed((_x0 + _x1) / 2, 379, _tabs[_ti][3], 0.3, 0.3, 0);
+    }
+
+    // ---- 播放列表（队列独立成一级标签）----
+    if (button_collision(286, 365, 372, 389))
+    {
+        draw_set_alpha(0.25);
+        draw_roundrect(286, 365, 372, 389, false);
+        draw_set_alpha(1);
+        if (button_click(286, 365, 372, 389))
+        {
+            qqm_open = 2;
+            qqm_search_focus = 0;
+            keyboard_string = "";
+        }
+    }
+    else if (qqm_open == 2)
+    {
+        draw_set_alpha(0.35);
+        draw_roundrect(286, 365, 372, 389, false);
         draw_set_alpha(1);
     }
     draw_set_color(c_white);
-    draw_text_transformed(75, 379, qqm_text("tab_local"), 0.3, 0.3, 0);
-
-    // ---- QQ音乐 ----
-    if (button_collision(119, 365, 219, 389))
-    {
-        draw_set_alpha(0.25);
-        draw_roundrect(119, 365, 219, 389, false);
-        draw_set_alpha(1);
-        if (button_click(119, 365, 219, 389))
-        {
-            qqm_open = 1;
-            if (qqm_ready == 0)
-            {
-                qqm_status = qqm_text("loading");
-                qqm_get("/status", "status");
-            }
-        }
-    }
-    else if (qqm_open == 1)
-    {
-        draw_set_alpha(0.35);
-        draw_roundrect(119, 365, 219, 389, false);
-        draw_set_alpha(1);
-    }
-    draw_text_transformed(169, 379, qqm_text("tab_qq"), 0.3, 0.3, 0);
+    draw_text_transformed(329, 379, qqm_text("tab_queue"), 0.3, 0.3, 0);
 
     // ---- bridge / login hint at the right of the tab row ----
     draw_set_halign(fa_right);
@@ -1331,6 +1381,15 @@ function qqm_draw_body()
     draw_set_alpha(1);
 
     qqm_draw_tabs();
+
+    // 播放列表 is its own top-level page now: drive the existing queue view
+    // (qqm_view == 3) directly instead of the search/playlist sub pages.
+    var _queue_page = (qqm_open == 2);
+    if (_queue_page)
+    {
+        qqm_view = 3;
+        qqm_search_focus = 0;
+    }
 
     // ---------------- close button ----------------
     draw_sprite_ext(spr_icon_close_small, 0, 460, 370, 1, 1, 0, c_white, 1);
