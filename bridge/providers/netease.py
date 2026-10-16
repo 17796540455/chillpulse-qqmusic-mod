@@ -197,6 +197,17 @@ def playlist(pid: str, offset: int = 0, count: int = 1000) -> dict:
         raise BridgeError("网易云歌单不存在或不可访问")
     all_tracks = [_track(t) for t in (pl.get("tracks") or [])]
     total = int(pl.get("trackCount") or len(all_tracks))
+    # Large playlists only carry the first ~20 tracks in the detail response;
+    # the remainder has to come from the track/all endpoint.
+    if total > len(all_tracks):
+        try:
+            more = _api("/api/playlist/track/all",
+                        {"id": pid, "limit": 1000, "offset": len(all_tracks)})
+            extra = [_track(t) for t in (more.get("songs") or [])]
+            if extra:
+                all_tracks += extra
+        except BridgeError:
+            pass                       # keep whatever the detail response gave us
     start = max(0, int(offset or 0))
     want = max(1, int(count or 1000))
     return {"name": pl.get("name") or "", "total": total,
