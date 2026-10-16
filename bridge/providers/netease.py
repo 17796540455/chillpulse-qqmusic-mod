@@ -160,13 +160,22 @@ def playlists(uid: str = "") -> list:
     j = _api("/api/user/playlist", {"uid": account, "limit": 1000, "offset": 0})
     out = []
     for p in (j.get("playlist") or []):
+        pid = str(p.get("id") or "").strip()
+        if not pid:
+            continue
+        name = p.get("name") or ""
         count = int(p.get("trackCount") or 0)
+        # NetEase marks 我喜欢的音乐 with specialType 5, like QQ's 我喜欢(dirId 201)
+        fav = int(p.get("specialType") or 0) == 5
+        # The bridge reads disstid/name/dirid/song_cnt (that is the shape
+        # qqmusic.user_playlists returns), so provide those - and the camelCase
+        # spelling as well, in case other callers look for it.
         out.append({
-            "tid": str(p.get("id") or ""),
-            "dirName": p.get("name") or "",
-            "songNum": count,
-            # NetEase marks 我喜欢的音乐 with specialType 5, like QQ's 我喜欢
-            "special": "fav" if int(p.get("specialType") or 0) == 5 else "",
+            "disstid": pid, "tid": pid,
+            "name": name, "dirName": name,
+            "dirid": 201 if fav else 0,
+            "song_cnt": count, "songNum": count,
+            "special": "fav" if fav else "",
         })
     return out
 
