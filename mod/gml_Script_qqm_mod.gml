@@ -1487,12 +1487,14 @@ function qqm_draw_body()
     }
     else
     {
-        if (button_collision(35, _sub_y1, 95, _sub_y2))
+        // 歌单 / 搜索 share the whole row now that the per-service queue tab
+        // is gone (it used to sit at x 163..223).
+        if (button_collision(35, _sub_y1, 127, _sub_y2))
         {
             draw_set_alpha(0.35);
-            draw_roundrect(35, _sub_y1, 95, _sub_y2, false);
+            draw_roundrect(35, _sub_y1, 127, _sub_y2, false);
             draw_set_alpha(1);
-            if (button_click(35, _sub_y1, 95, _sub_y2))
+            if (button_click(35, _sub_y1, 127, _sub_y2))
             {
                 qqm_view = 0;
                 qqm_scroll = 0;
@@ -1506,26 +1508,26 @@ function qqm_draw_body()
         else
         {
             draw_set_alpha(qqm_view == 0 ? 0.3 : 0.15);
-            draw_roundrect(35, _sub_y1, 95, _sub_y2, false);
+            draw_roundrect(35, _sub_y1, 127, _sub_y2, false);
             draw_set_alpha(1);
         }
-        draw_text_transformed(65, 402, qqm_text("playlist"), 0.28, 0.28, 0);
+        draw_text_transformed(81, 402, qqm_text("playlist"), 0.28, 0.28, 0);
 
-        if (button_collision(99, _sub_y1, 159, _sub_y2))
+        if (button_collision(131, _sub_y1, 223, _sub_y2))
         {
             draw_set_alpha(0.35);
-            draw_roundrect(99, _sub_y1, 159, _sub_y2, false);
+            draw_roundrect(131, _sub_y1, 223, _sub_y2, false);
             draw_set_alpha(1);
         }
         else
         {
             draw_set_alpha(0.15);
-            draw_roundrect(99, _sub_y1, 159, _sub_y2, false);
+            draw_roundrect(131, _sub_y1, 223, _sub_y2, false);
             draw_set_alpha(1);
         }
-        draw_text_transformed(129, 402, qqm_text("search"), 0.28, 0.28, 0);
+        draw_text_transformed(177, 402, qqm_text("search"), 0.28, 0.28, 0);
 
-        if (button_click(99, _sub_y1, 159, _sub_y2))
+        if (button_click(131, _sub_y1, 223, _sub_y2))
         {
             qqm_view = 2;
             qqm_scroll = 0;
