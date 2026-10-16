@@ -1286,6 +1286,16 @@ qqm_draw_tabs = function()
             if (button_click(_x0, 365, _x1, 389))
             {
                 qqm_open = 1;
+                // coming back from 播放列表 leaves qqm_view on the queue page,
+                // which would show the queue inside the service tab - go back
+                // to the list view instead, so the playlists appear right away
+                if (qqm_view == 3)
+                {
+                    qqm_view = 0;
+                    qqm_scroll = 0;
+                    qqm_search_focus = 0;
+                    keyboard_string = "";
+                }
                 if (qqm_source != _src)
                 {
                     // switching service: every list belongs to the old one, so
