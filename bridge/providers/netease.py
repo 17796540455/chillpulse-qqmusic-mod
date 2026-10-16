@@ -174,7 +174,10 @@ def playlists(uid: str = "") -> list:
             "disstid": pid, "tid": pid,
             "name": name, "dirName": name,
             "dirid": 201 if fav else 0,
-            "song_cnt": count, "songNum": count,
+            # the bridge has used several spellings for the track count over
+            # time; give it all of them so the number shows up in game
+            "song_cnt": count, "songNum": count, "songnum": count,
+            "count": count, "total": count, "trackCount": count,
             "special": "fav" if fav else "",
         })
     return out
