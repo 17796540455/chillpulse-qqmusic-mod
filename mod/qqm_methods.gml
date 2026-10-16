@@ -262,7 +262,9 @@ qqm_get = function(_path, _kind)
     var _head = string_copy(_path, 1, 8);
     if (_head == "/search?" || _head == "/playlis")
     {
-        _path += "&src=" + qqm_source;
+        // "/playlists" has no query yet, so it needs "?" rather than "&"
+        var _sep = (string_pos("?", _path) > 0) ? "&" : "?";
+        _path += _sep + "src=" + qqm_source;
     }
     qqm_req = http_get(qqm_base + _path);
     return 1;
