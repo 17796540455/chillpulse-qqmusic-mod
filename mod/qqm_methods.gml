@@ -1288,12 +1288,16 @@ qqm_draw_tabs = function()
                 qqm_open = 1;
                 if (qqm_source != _src)
                 {
-                    // switching service: the old list and its queue position go away
+                    // switching service: every list belongs to the old one, so
+                    // clear them all - songs *and* playlists
                     qqm_source = _src;
                     qqm_tracks = [];
+                    qqm_list = [];
+                    qqm_playlists = [];
                     qqm_list_kind = "";
                     qqm_view = 0;
                     qqm_hovered = -1;
+                    qqm_scroll = 0;
                 }
                 if (qqm_ready == 0)
                 {

@@ -193,9 +193,12 @@ def song_url_ex(mid: str, quality: str = "128", uin: str = "0",
                 "filename": f"{mid}.mp3", "quality": level,
                 "sip": urllib.parse.urlparse(url).netloc, "br": d.get("br"),
                 "size": d.get("size"), "level": d.get("level")}
-    # not playable: explain why as precisely as possible
+    # not playable: explain why as precisely as possible.
+    # NB: only *our* cookie counts here - the bridge hands every provider the
+    # QQ Music cookie, and treating that as a NetEase login made every VIP
+    # track claim "needs membership" instead of "needs login".
     if inner == -110 or inner == -460:
-        if not (cookie or _cookie()):
+        if not _cookie():
             raise BridgeError("该歌曲需要网易云登录")
         raise BridgeError("该歌曲需要网易云会员或已下架")
     trial = d.get("freeTrialInfo")
