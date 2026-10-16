@@ -289,6 +289,19 @@ def game_cache_dir() -> str:
     return os.path.join(GAME_DIR, OUT_SUBDIR)
 
 
+def _cdn_referer(url: str) -> str:
+    """The Referer the url's own CDN expects.
+
+    Each service rejects a request that carries a foreign Referer: NetEase
+    answers 403 Forbidden when it sees QQ Music's, which is why NetEase
+    downloads failed while its url resolution worked.
+    """
+    host = urllib.parse.urlsplit(url or "").netloc.lower()
+    if host.endswith("126.net") or "music.163.com" in host or host.endswith("163.com"):
+        return "https://music.163.com/"
+    return "https://y.qq.com/"
+
+
 def out_path(mid: str) -> str:
     return os.path.join(game_cache_dir(), qqmusic.safe_name(mid) + ".ogg")
 
@@ -960,7 +973,7 @@ def encode_from_url(url: str, dst: str, cancel: threading.Event) -> int:
     _drop_part(part)
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
            "-user_agent", qqmusic.UA,
-           "-headers", "Referer: https://y.qq.com/\r\n",
+           "-headers", "Referer: " + _cdn_referer(url) + "\r\n",
            "-i", url, *FFMPEG_ARGS, "-f", "ogg", part]
     errs: list = []
     proc = _spawn_ffmpeg(cmd)
@@ -1033,7 +1046,7 @@ def encode_from_pipe(url: str, dst: str, cancel: threading.Event) -> int:
     reader.start()
     req = urllib.request.Request(url, headers={
         "User-Agent": qqmusic.UA,
-        "Referer": "https://y.qq.com/",
+        "Referer": _cdn_referer(url),
         "Accept": "*/*",
     })
     total = 0
@@ -1098,7 +1111,7 @@ def download(url: str, dest: str, cancel: threading.Event) -> int:
     part = dest + ".part"
     req = urllib.request.Request(url, headers={
         "User-Agent": qqmusic.UA,
-        "Referer": "https://y.qq.com/",
+        "Referer": _cdn_referer(url),
         "Accept": "*/*",
     })
     total = 0
