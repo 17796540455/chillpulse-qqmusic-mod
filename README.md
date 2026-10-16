@@ -51,7 +51,7 @@ bridge\start_bridge.bat          # 起桥接服务（保持窗口开着）
 想要**自动启动**（推荐）：`mod\launcher\` 里的启动器可让桥接随游戏会话起停，
 或用 `mod\install_autostart.ps1` 做登录自启。
 
----
+
 
 
 
