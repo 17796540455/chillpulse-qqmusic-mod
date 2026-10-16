@@ -1,69 +1,47 @@
-# Troubleshooting
+# 使用问题排查
 
-## The panel says "not signed in" / 面板显示未登录
+## 安装没成功
 
-1. Is the bridge running? `http://127.0.0.1:38612/status`
-   * no answer → start it (`bridge\start_bridge.bat`) or let the launcher do it
-   * `"logged_in": false` → the cookie is missing or expired, re-paste it
-2. A QQ Music login ticket (`qm_keyst` / `qqmusic_key`) lasts a few days. When it
-   expires, playback silently drops to free tracks only.
+- 找不到游戏：在 Steam 的 ChillPulse 页面选择“管理 → 浏览本地文件”，复制打开的目录。
+- 找不到 Python：安装 python.org 提供的 Python 3.9 或更高版本，保留 tcl/tk 组件，再运行安装。
+- 找不到 ffmpeg：按安装提示通过 winget 安装，或自行安装并加入 PATH。
+- 下载工具失败：检查能否连接 GitHub，恢复网络后重新运行 `install.bat`。
+- 生成补丁失败：保留安装窗口提示和 Mod 目录中的 `install.log`，反馈时附上错误文字。安装失败不会将半成品写入游戏。
+- 版本不匹配：先使用适配当前游戏版本的 Mod。不要手动覆盖旧版游戏文件。
 
-## Sound does not start / 点了没声音
+## 账号设置打不开
 
-* The first play of a track needs a download + ffmpeg transcode (8–25 s
-  depending on the CDN). The panel shows 加载中… / 缓冲中… meanwhile.
-* A track that has been played once is cached and starts instantly.
-* Look-ahead prefetch (`qqm_prefetch_ahead`, default 3) keeps the next few
-  tracks warm, so listening through a playlist is seamless.
+先确认已完成 `install.bat` 的安装。若更新 Python、移动 Mod 目录或移动游戏后失效，重新运行安装并更新 Steam 启动参数。
 
-## Steam restored `data.win` and the QQ Music tab disappeared
+## 未登录、歌单为空
 
-Steam's *Verify integrity of game files* (and any game update) restores
-files from its own manifest, which removes the patch.
+1. 运行 `账号设置.bat`，选择出现问题的平台，点击“检查已保存登录”。
+2. QQ 音乐和网易云使用独立登录信息，需要分别设置。桌面客户端的登录不会自动导入。
+3. 失效后重新登录官网，按 [README 的登录步骤](../README.md#qq-音乐与网易云如何登录)复制新的 Cookie 并验证保存。
+4. 保存后重新打开游戏，点击相应音源，等待自动加载。
 
-* `mod\reinstall_mod.bat` puts it back in one double-click.
-* `mod_guard.py` also runs on every launch and repairs it automatically —
-  but only when the file is *exactly* the vanilla build the patch was made
-  against. After a real game update it deliberately does nothing and says so in
-  `mod_guard.log` (copying an old patched `data.win` over a new build would
-  break the game). Rebuild the patch for the new version instead.
+QQ 歌单读取成功仅代表凭证格式和歌单请求通过；播放权限仍需在游戏内确认。网易云设置中会验证账号并显示昵称。
 
-## Steam cannot connect at all
+## 点歌后一直加载或没有声音
 
-Check `E:\steam\steam\logs\connection_log.txt`: if every
-`PingWebSocketCM()` line ends in `timeout/neterror`, a local proxy (Clash,
-v2ray, …) is rejecting `*.steamserver.net`.
+首次播放需要联网下载并处理音频。先等待一首歌加载完成，再尝试其他歌，避免连续反复点选。
 
-* Direct connections to those hosts are usually fine — measured 41–201 ms.
-* Fix: add the Steam hosts to the WinINET bypass list
-  (`mod\fix_proxy_bypass.py` does exactly that), or add
-  `DOMAIN-SUFFIX,steamserver.net,DIRECT` to the proxy rules, then **restart
-  Steam** (it reads proxy settings only at startup).
-* The bridge itself always bypasses the system proxy, so QQ Music keeps working
-  either way.
+如果仅个别歌曲失败，在官网用同一账号检查是否能完整播放。会员、专辑、试听和地区限制由平台决定。
 
-## Steam shows "stopping" forever after quitting the game
+如果所有歌曲都失败，检查网络、对应账号的登录状态，以及 `runtime\qqbridge.log` 中的错误。不要同时运行旧的后台服务脚本。
 
-A Steam-side record issue with this game (it happens with the unmodified game
-too; verified by comparing against a vanilla install, and the game's exit code
-is a clean `0x00000000`). Nothing is actually running at that point.
+## Steam 退出游戏后仍显示运行中
 
-* Restart Steam, or run `mod\steam_unstick.py`, which detects the state
-  (Steam says running + no `ChillPulse.exe`) and restarts Steam for you.
+确认 Steam 的启动选项使用本次安装生成的完整一行，且没有另外启动旧版的 `start_bridge.bat` 或开机自启服务。正常使用时，后台服务随游戏自动退出。
 
-## Rebuilding the patch yourself
+关闭旧后台后重新从 Steam 启动，再正常退出一次。如果仍有问题，提供退出时间，以及 `runtime\launcher.log` 和 `runtime\qqbridge.log` 中对应时间的错误。
 
-```
-tools\make_methods.py                       # gml_Script_qqm_mod.gml -> qqm_methods.gml
-UndertaleModCli.exe load <pristine data.win> -s mod\apply_mod.csx -o data_patched.win
-powershell -File mod\install_mod.ps1        # backs up once, installs, keeps the backup
-```
+## 更新后标签消失或无法启动
 
-The patcher fails loudly if an anchor does not match, which is how you find out
-that the game was updated.
+Steam 验证文件会恢复原版游戏数据。相同游戏版本会在下次通过 Mod 启动器启动时恢复补丁；游戏版本变化时，需等待适配版本。
 
-## Ports
+要临时玩原版，关闭游戏、移除 Steam 中本 Mod 的启动参数，再验证游戏文件。
 
-The bridge listens on `127.0.0.1:38612` only. Nothing is exposed to the
-network. `--port` changes it, but the patched game hard-codes the port in
-`qqm_port` (`mod\gml_Script_qqm_mod.gml`), so both must agree.
+## 反馈问题时需要什么
+
+提供游戏版本、发生在哪个平台、操作步骤、错误文字，以及相关日志中的出错片段。不要上传 `auth.json`、`auth_netease.json`、Cookie 或整个 `runtime` 目录。

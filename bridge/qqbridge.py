@@ -469,12 +469,7 @@ def log_cache_stats(prefix: str = "cache stats") -> None:
 
 
 def find_ffmpeg(explicit: str | None) -> str | None:
-    """PATH first, then the known winget install, then --ffmpeg."""
-    found = shutil.which("ffmpeg")
-    if found:
-        return found
-    if os.path.isfile(KNOWN_FFMPEG):
-        return KNOWN_FFMPEG
+    """Prefer the installer's saved path over the inherited Steam PATH."""
     if explicit:
         if os.path.isfile(explicit):
             return explicit
@@ -482,6 +477,11 @@ def find_ffmpeg(explicit: str | None) -> str | None:
         if alt:
             return alt
         LOG.warning("--ffmpeg %s not usable; treating ffmpeg as missing", explicit)
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    if os.path.isfile(KNOWN_FFMPEG):
+        return KNOWN_FFMPEG
     return None
 
 
@@ -1671,10 +1671,12 @@ def local_search(keyword: str, num: int) -> list[dict]:
 
 
 def api_playlists(_p: dict):
-    qqmusic.set_source(_p.get("src") if isinstance(_p, dict) else None)
+    source = qqmusic.set_source(_p.get("src") if isinstance(_p, dict) else None)
     au = reload_auth()
-    if not au["logged_in"]:
-        return 200, {"ok": True, "logged_in": False, "playlists": []}
+    # NetEase uses its own auth file; a signed-out QQ account must not gate it.
+    if source == "qq" and not au["logged_in"]:
+        return 200, {"ok": True, "source": source,
+                     "logged_in": False, "playlists": []}
     raw = _retry(lambda: qqmusic.user_playlists(au["uin"], au["cookie"],
                                                 timeout=UPSTREAM_TIMEOUT),
                  label="playlists")
@@ -1700,7 +1702,8 @@ def api_playlists(_p: dict):
     out.sort(key=lambda x: (x["special"] != "fav", x["name"]))
     LOG.info("playlists -> %d: %s", len(out),
              ", ".join(f"{p['name']}={p['count']}" for p in out))
-    return 200, {"ok": True, "logged_in": True, "playlists": out}
+    return 200, {"ok": True, "source": source,
+                 "logged_in": True, "playlists": out}
 
 
 def api_playlist(p: dict):

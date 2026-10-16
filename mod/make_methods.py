@@ -12,8 +12,8 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(os.path.dirname(HERE), "mods", "patch", "gml_Script_qqm_mod.gml")
-DST = os.path.join(os.path.dirname(HERE), "mods", "patch", "qqm_methods.gml")
+SRC = os.path.join(HERE, "gml_Script_qqm_mod.gml")
+DST = os.path.join(HERE, "qqm_methods.gml")
 
 
 def main():

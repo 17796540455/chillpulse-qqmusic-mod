@@ -1,193 +1,122 @@
-<#
-    ChillPulse QQ Music Mod - one-click installer
+﻿param([string]$GameDir, [switch]$Check, [string]$Python, [string]$ToolDir)
+$ErrorActionPreference = 'Stop'
+$Root = $PSScriptRoot
+$env:PYTHONUTF8 = '1'
 
-    Does everything the manual steps used to need:
-      1. finds your ChillPulse install (Steam libraries, or ask)
-      2. checks Python 3 and ffmpeg, and says exactly how to fix them
-      3. downloads the UndertaleModTool CLI (once, ~100 MB)
-      4. backs up data.win and installs the patch
-      5. starts the bridge once so you can sign in to QQ Music
-
-    Usage:  powershell -ExecutionPolicy Bypass -File install.ps1
-            powershell -ExecutionPolicy Bypass -File install.ps1 -Check      (dry run)
-            powershell -ExecutionPolicy Bypass -File install.ps1 -GameDir "D:\...\ChillPulse"
-#>
-param(
-    [string]$GameDir,
-    [switch]$Check
-)
-
-$ErrorActionPreference = "Stop"
-$Root    = $PSScriptRoot
-$Bridge  = Join-Path $Root "bridge"
-$Mod     = Join-Path $Root "mod"
-$Tools   = Join-Path $Root "tools"
-$UtmtDir = Join-Path $Tools "utmt-cli"
-$UtmtExe = Join-Path $UtmtDir "UndertaleModCli.exe"
-$UtmtZip = "https://github.com/UnderminersTeam/UndertaleModTool/releases/download/0.9.2.0/UTMT_CLI_v0.9.2.0-Windows.zip"
-$Port    = 38612
-
-function Step($n, $msg) { Write-Host ""; Write-Host "[$n] $msg" -ForegroundColor Cyan }
-function Ok($msg)       { Write-Host "    OK   $msg" -ForegroundColor Green }
-function Warn($msg)     { Write-Host "    WARN $msg" -ForegroundColor Yellow }
-function Die($msg, $hint) {
-    Write-Host "    FAIL $msg" -ForegroundColor Red
-    if ($hint) { Write-Host "         $hint" -ForegroundColor Yellow }
-    exit 1
-}
-
-Write-Host ""
-Write-Host "  ChillPulse QQ Music Mod - installer" -ForegroundColor White
-Write-Host "  ==================================" -ForegroundColor White
-
-# ---------------------------------------------------------------- 1. game dir
-Step 1 "Locating ChillPulse"
 function Find-Game {
-    $steam = (Get-ItemProperty "HKCU:\Software\Valve\Steam" -Name SteamPath -EA SilentlyContinue).SteamPath
+    $steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -Name SteamPath -EA SilentlyContinue).SteamPath
     if (-not $steam) { return $null }
     $steam = $steam -replace '/', '\'
-    $roots = @($steam)
-    $lf = Join-Path $steam "steamapps\libraryfolders.vdf"
-    if (Test-Path $lf) {
-        foreach ($m in [regex]::Matches((Get-Content $lf -Raw), '"path"\s+"([^"]+)"')) {
-            $roots += ($m.Groups[1].Value -replace '\\\\', '\')
+    $libraries = @($steam)
+    $config = Join-Path $steam 'steamapps\libraryfolders.vdf'
+    if (Test-Path -LiteralPath $config) {
+        foreach ($match in [regex]::Matches((Get-Content -LiteralPath $config -Raw), '"path"\s+"([^"]+)"')) {
+            $libraries += $match.Groups[1].Value.Replace('\\', '\')
         }
     }
-    foreach ($r in $roots) {
-        $p = Join-Path $r "steamapps\common\ChillPulse"
-        if (Test-Path (Join-Path $p "ChillPulse.exe")) { return $p }
+    foreach ($library in $libraries) {
+        $candidate = Join-Path $library 'steamapps\common\ChillPulse'
+        if (Test-Path -LiteralPath (Join-Path $candidate 'ChillPulse.exe')) { return $candidate }
     }
-    return $null
-}
-if (-not $GameDir) { $GameDir = Find-Game }
-if (-not $GameDir) {
-    if ($Check) { Warn "not found automatically (use -GameDir)" }
-    else {
-        Write-Host "    Could not find the game automatically."
-        $GameDir = Read-Host "    Paste the ChillPulse folder path"
-    }
-}
-if ($GameDir) {
-    $GameDir = $GameDir.Trim('"').TrimEnd('\')
-    if (-not (Test-Path (Join-Path $GameDir "ChillPulse.exe"))) {
-        Die "no ChillPulse.exe in $GameDir" "Right-click the game in Steam -> Manage -> Browse local files"
-    }
-    Ok "game folder: $GameDir"
 }
 
-# ------------------------------------------------------------------ 2. python
-Step 2 "Checking Python 3"
-$PyExe = $null
-foreach ($c in @("py", "python")) {
+function Find-Python {
+    if ($Python) { return $Python }
+    $candidates = @()
     try {
-        $v = & $c -3 -V 2>&1
-        if ($LASTEXITCODE -eq 0 -and "$v" -match "Python 3") { $PyExe = $c; Ok "$c -> $v"; break }
+        $resolved = & py -3 -c 'import sys; print(sys.executable)' 2>$null
+        if ($LASTEXITCODE -eq 0) { $candidates += "$resolved" }
     } catch { }
-}
-if (-not $PyExe) {
-    try { $v = & python -V 2>&1; if ("$v" -match "Python 3") { $PyExe = "python"; Ok "python -> $v" } } catch { }
-}
-if (-not $PyExe) {
-    Die "Python 3 was not found" "Install it from https://www.python.org/downloads/ and tick 'Add python.exe to PATH'"
-}
-
-# ------------------------------------------------------------------ 3. ffmpeg
-Step 3 "Checking ffmpeg"
-$Ffmpeg = Get-Command ffmpeg -EA SilentlyContinue
-if ($Ffmpeg) { Ok "ffmpeg: $($Ffmpeg.Source)" }
-elseif ($Check) { Warn "ffmpeg not found (winget install Gyan.FFmpeg)" }
-else {
-    Warn "ffmpeg not found - needed to transcode songs"
-    $a = Read-Host "    Install it now with winget? (y/N)"
-    if ($a -match '^[Yy]') { & winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements }
-    if (-not (Get-Command ffmpeg -EA SilentlyContinue)) { Die "ffmpeg still missing" "winget install Gyan.FFmpeg, then reopen this window" }
-    Ok "ffmpeg installed"
-}
-
-# --------------------------------------------------------------- 4. UTMT CLI
-Step 4 "UndertaleModTool CLI"
-if (Test-Path $UtmtExe) { Ok "already present" }
-elseif ($Check) { Warn "not downloaded yet (~100 MB, fetched on first install)" }
-else {
-    New-Item -ItemType Directory -Force -Path $UtmtDir | Out-Null
-    $zip = Join-Path $env:TEMP "UTMT_CLI.zip"
-    Write-Host "    downloading (~100 MB) ..."
-    try {
-        Invoke-WebRequest -Uri $UtmtZip -OutFile $zip -UseBasicParsing
-        Expand-Archive -Path $zip -DestinationPath $UtmtDir -Force
-        Remove-Item $zip -Force -EA SilentlyContinue
-    } catch { Die "download failed: $($_.Exception.Message)" "Grab it manually: $UtmtZip -> tools\utmt-cli\" }
-    if (-not (Test-Path $UtmtExe)) {
-        $found = Get-ChildItem $UtmtDir -Recurse -Filter "UndertaleModCli.exe" -EA SilentlyContinue | Select-Object -First 1
-        if ($found) { $UtmtExe = $found.FullName } else { Die "UndertaleModCli.exe not in the archive" "Unpack it into tools\utmt-cli\" }
+    $command = Get-Command python -EA SilentlyContinue
+    if ($command -and $command.Source -notmatch 'WindowsApps') { $candidates += $command.Source }
+    foreach ($registry in @('HKCU:\Software\Python\PythonCore', 'HKLM:\Software\Python\PythonCore')) {
+        foreach ($version in (Get-ChildItem $registry -EA SilentlyContinue)) {
+            $key = Get-Item (Join-Path $version.PSPath 'InstallPath') -EA SilentlyContinue
+            if ($key) { $candidates += Join-Path $key.GetValue('') 'python.exe' }
+        }
     }
-    Ok "ready"
-}
-
-# ----------------------------------------------------------------- 5. patch
-Step 5 "Patching the game"
-if ($Check) { Warn "skipped in -Check mode" }
-else {
-    $dataWin = Join-Path $GameDir "data.win"
-    $backup  = "$dataWin.qqmod-backup"
-    if (-not (Test-Path $dataWin)) { Die "no data.win in the game folder" "Verify the game files in Steam first" }
-    if (-not (Test-Path $backup)) {
-        Copy-Item $dataWin $backup
-        Ok "kept a pristine copy: data.win.qqmod-backup"
-    } else { Ok "vanilla backup already exists" }
-
-    $patched = Join-Path $Mod "data_patched.win"
-    Remove-Item $patched -Force -EA SilentlyContinue
-    Write-Host "    applying mod\apply_mod.csx ..."
-    & $UtmtExe load $dataWin -s (Join-Path $Mod "apply_mod.csx") -o $patched 2>&1 |
-        Select-String -Pattern "QQM:|Exception|error CS" | ForEach-Object { "      " + $_.Line }
-    if (-not (Test-Path $patched)) { Die "the patcher produced no output" "See the message above; the game was probably updated" }
-
-    Copy-Item $patched $dataWin -Force
-    $hash = (Get-FileHash $dataWin -Algorithm SHA256).Hash.ToLower()
-    Ok "installed (sha256 $($hash.Substring(0,16))...)"
-
-    # keep the guard's expectation in sync so it can repair the patch later
-    $guard = Join-Path $Mod "mod_guard.py"
-    if (Test-Path $guard) {
-        (Get-Content $guard -Raw) -replace 'PATCHED_SHA256 = "[0-9a-f]+"', "PATCHED_SHA256 = `"$hash`"" |
-            Set-Content $guard -Encoding utf8
-        Ok "mod_guard.py updated (auto-repairs after Steam verify/update)"
+    foreach ($candidate in $candidates) {
+        if (-not (Test-Path -LiteralPath $candidate)) { continue }
+        & $candidate -c 'import sys, tkinter; assert sys.version_info >= (3, 9)' 2>$null
+        if ($LASTEXITCODE -eq 0) { return $candidate }
     }
 }
 
-# ----------------------------------------------------------------- 6. bridge
-Step 6 "QQ Music sign-in"
-$auth = Join-Path $Bridge "auth.json"
-if ($Check) { Warn "skipped in -Check mode" }
-else {
-    if (Test-Path $auth) { Ok "auth.json already present" }
-    else {
-        Write-Host "    starting the bridge so you can sign in ..."
-        Start-Process -FilePath "pyw" -ArgumentList "-3", (Join-Path $Bridge "qqbridge.py"),
-            "--port", "$Port", "--game-dir", $GameDir -WindowStyle Hidden -EA SilentlyContinue
-        Start-Sleep -Seconds 6
-        Start-Process "http://127.0.0.1:$Port/login"
-        Write-Host "    a browser page should have opened - scan it with mobile QQ," -ForegroundColor Yellow
-        Write-Host "    or paste a cookie and press Enter here when done." -ForegroundColor Yellow
-        Read-Host "    (Enter to continue)"
-        if (Test-Path $auth) { Ok "signed in" } else { Warn "no auth.json yet - you can sign in later at http://127.0.0.1:$Port/login" }
+function Find-Ffmpeg {
+    $command = Get-Command ffmpeg -EA SilentlyContinue
+    if ($command) { return $command.Source }
+    $link = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\ffmpeg.exe'
+    if (Test-Path -LiteralPath $link) { return $link }
+    foreach ($package in (Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages') -Directory -Filter 'Gyan.FFmpeg*' -EA SilentlyContinue)) {
+        $found = Get-ChildItem $package.FullName -Recurse -Filter ffmpeg.exe -EA SilentlyContinue | Select-Object -First 1
+        if ($found) { return $found.FullName }
     }
 }
 
-# ------------------------------------------------------------------ summary
-Write-Host ""
-Write-Host "  Done." -ForegroundColor Green
-Write-Host ""
-Write-Host "  To play:"
-Write-Host "    1. start the bridge:  bridge\start_bridge.bat   (keep the window open)"
-Write-Host "    2. start the game from Steam, press the ≡ button, pick the QQ Music tab"
-Write-Host ""
-if (Test-Path (Join-Path $Mod "launcher\launcher.py")) {
-    Write-Host "  Optional: use the launcher in mod\launcher\ so the bridge starts and" -ForegroundColor DarkGray
-    Write-Host "  stops with the game automatically." -ForegroundColor DarkGray
+try {
+    Write-Host 'ChillPulse · QQ / 网易云音乐 Mod 安装' -ForegroundColor Cyan
+    if (-not $GameDir) { $GameDir = Find-Game }
+    if (-not $GameDir) {
+        if ($Check) { throw '未找到游戏。可用 -GameDir 指定包含 ChillPulse.exe 的目录。' }
+        $GameDir = Read-Host '请粘贴游戏目录（Steam → 管理 → 浏览本地文件）'
+    }
+    $GameDir = [IO.Path]::GetFullPath($GameDir.Trim().Trim('"'))
+    foreach ($name in @('ChillPulse.exe', 'data.win')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $GameDir $name))) { throw "游戏目录缺少 $name" }
+    }
+    Write-Host "游戏目录：$GameDir"
+    $PyExe = Find-Python
+    if (-not $PyExe) { throw '请先安装 python.org 的 Python 3.9 或更高版本，保留 tcl/tk 组件，然后重试。' }
+    & $PyExe -c 'import sys, tkinter; assert sys.version_info >= (3, 9)'
+    if ($LASTEXITCODE -ne 0) { throw 'Python 需要 3.9 或更高版本及 tkinter 组件。' }
+    Write-Host "Python：$PyExe"
+    $Ffmpeg = Find-Ffmpeg
+    if (-not $Ffmpeg -and -not $Check) {
+        if ((Read-Host '缺少 ffmpeg，是否通过 winget 安装？输入 Y 继续') -match '^[Yy]$') {
+            & winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) { throw 'ffmpeg 安装未成功，请完成安装后重试。' }
+            $Ffmpeg = Find-Ffmpeg
+        }
+    }
+    if (-not $Ffmpeg) { throw '未找到 ffmpeg。安装方式：winget install --id Gyan.FFmpeg -e' }
+    Write-Host "ffmpeg：$Ffmpeg"
+    if (-not $ToolDir) { $ToolDir = Join-Path $Root 'tools\utmt-cli' }
+    $Utmt = Get-ChildItem $ToolDir -Recurse -Filter UndertaleModCli.exe -EA SilentlyContinue | Select-Object -First 1
+    if ($Check) {
+        if (-not $Utmt) { Write-Host '首次安装时将从官方 GitHub 下载补丁工具。' }
+        Write-Host '环境检查完成；未安装、未修改游戏。' -ForegroundColor Green
+        exit 0
+    }
+    if (-not $Utmt) {
+        Write-Host '正在下载补丁工具（首次安装需要，可能需几分钟）……'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        New-Item -ItemType Directory -Force -Path $ToolDir | Out-Null
+        $zip = Join-Path $ToolDir 'UTMT_CLI.zip'
+        Invoke-WebRequest -Uri 'https://github.com/UnderminersTeam/UndertaleModTool/releases/download/0.9.2.0/UTMT_CLI_v0.9.2.0-Windows.zip' -OutFile $zip -UseBasicParsing
+        Expand-Archive -LiteralPath $zip -DestinationPath $ToolDir -Force
+        Remove-Item -LiteralPath $zip -Force
+        $Utmt = Get-ChildItem $ToolDir -Recurse -Filter UndertaleModCli.exe | Select-Object -First 1
+        if (-not $Utmt) { throw '工具下载不完整，请重新运行安装。' }
+    }
+    Write-Host '正在备份并生成 Mod，请不要关闭窗口……'
+    $setupArguments = @((Join-Path $Root 'setup_mod.py'), '--game-dir', $GameDir, '--ffmpeg', $Ffmpeg, '--utmt', $Utmt.FullName)
+    $Dotnet = Get-Command dotnet -EA SilentlyContinue
+    $Dll = Join-Path $Utmt.DirectoryName 'UndertaleModCli.dll'
+    if ($Dotnet -and (Test-Path -LiteralPath $Dll)) {
+        $setupArguments[$setupArguments.Length - 1] = $Dll
+        $setupArguments += @('--dotnet', $Dotnet.Source)
+    }
+    & $PyExe @setupArguments
+    if ($LASTEXITCODE -ne 0) { throw '安装未完成，请按上方提示处理后重试。' }
+    $options = Get-Content -LiteralPath (Join-Path $Root 'runtime\steam_launch_options.txt') -Raw -Encoding UTF8
+    try { Set-Clipboard -Value $options.Trim(); Write-Host 'Steam 启动参数已复制到剪贴板。' -ForegroundColor Green }
+    catch { Write-Host '请打开 runtime\steam_launch_options.txt，复制其中整行。' }
+    Write-Host '接下来：Steam → ChillPulse → 属性 → 通用 → 启动选项，粘贴整行。'
+    Write-Host '如有已有参数，请保留并放在 %command% 后。无需完全退出 Steam。'
+    Write-Host '账号设置将打开。设置后，日常直接从 Steam 启动游戏即可。'
+    & (Join-Path $Root 'accounts.ps1')
+    exit 0
+} catch {
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    exit 1
 }
-if (Test-Path (Join-Path $Mod "reinstall_mod.bat")) {
-    Write-Host "  If Steam ever verifies the game files, run mod\reinstall_mod.bat." -ForegroundColor DarkGray
-}
-Write-Host ""

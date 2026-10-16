@@ -27,3 +27,6 @@ logs/
 # --- upstream tooling, downloaded by the user ------------------------------
 tools/utmt-cli/
 UndertaleModCli.exe
+runtime/
+.install-*/
+.install-backup-*/

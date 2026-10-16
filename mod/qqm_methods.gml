@@ -14,6 +14,8 @@ qqm_init = function()
     qqm_rows         = 6;      // rows visible in the panel
     qqm_req          = -1;     // id of the http request in flight
     qqm_kind         = "";     // what that request was for
+    qqm_req_source   = "qq";   // source captured when the request was issued
+    qqm_lists_pending = 0;     // load the selected service when the channel is free
     qqm_req_life     = 0;      // step counter guarding against a lost response
 
     qqm_status       = "";
@@ -137,7 +139,12 @@ qqm_text = function(_key)
         case "search":    return _cn ? "搜索" : "Search";
         case "loading":   return _cn ? "加载中..." : "Loading...";
         case "empty":     return _cn ? "暂无内容" : "No content";
-        case "offline":   return _cn ? "未连接QQ音乐服务" : "QQ Music service offline";
+        case "offline":
+            if (qqm_source == "ne")
+            {
+                return _cn ? "未连接网易云音乐服务" : "NetEase Music service offline";
+            }
+            return _cn ? "未连接QQ音乐服务" : "QQ Music service offline";
         case "buffering": return _cn ? "缓冲中..." : "Buffering...";
         case "hint":      return _cn ? "输入歌名或歌手" : "Type a song or artist";
         case "nologin":   return _cn ? "未登录：仅能播放免费歌曲" : "Not signed in - free tracks only";
@@ -251,9 +258,14 @@ qqm_get = function(_path, _kind)
 {
     if (qqm_req != -1)
     {
+        if (_kind == "playlists")
+        {
+            qqm_lists_pending = 1;
+        }
         return 0;
     }
     qqm_kind = _kind;
+    qqm_req_source = qqm_source;
     qqm_req_life = 0;
     // List requests have to say which service they are for.  The id-carrying
     // ones (/play, /playstate, /prefetch, /status) are left alone - they carry
@@ -267,7 +279,45 @@ qqm_get = function(_path, _kind)
         _path += _sep + "src=" + qqm_source;
     }
     qqm_req = http_get(qqm_base + _path);
+    if (_kind == "playlists")
+    {
+        qqm_lists_pending = 0;
+    }
     return 1;
+};
+
+/// @description Retry a tab's playlist load after playback or an older request.
+qqm_try_load_lists = function()
+{
+    if (qqm_lists_pending == 1 && qqm_open == 1 && qqm_req == -1
+        && qqm_pending_play < 0)
+    {
+        qqm_get("/playlists", "playlists");
+        qqm_loading = 1;
+    }
+};
+
+/// @description Enter an online service and load its playlists with one click.
+qqm_select_source = function(_src)
+{
+    if (qqm_source != _src)
+    {
+        qqm_tracks = [];
+        qqm_playlists = [];
+        qqm_list_kind = "";
+    }
+    qqm_open = 1;
+    qqm_source = _src;
+    qqm_view = 0;
+    qqm_scroll = 0;
+    qqm_hovered = -1;
+    qqm_search_focus = 0;
+    keyboard_string = "";
+    qqm_saw_status = 0;
+    qqm_status = qqm_text("loading");
+    qqm_loading = 1;
+    qqm_lists_pending = 1;
+    qqm_try_load_lists();
 };
 
 /// @description Stop and release the current QQ stream.
@@ -656,6 +706,9 @@ qqm_step_body = function()
         qqm_try_send_play();
     }
 
+    // User-requested lists take the next free slot before background prefetch.
+    qqm_try_load_lists();
+
     // ---- look-ahead prefetch: keep the next few queue entries warm ----------
     if (array_length(qqm_queue) > 1 && qqm_play_index >= 0)
     {
@@ -787,14 +840,30 @@ qqm_async_body = function(_map)
     {
         return;
     }
+    var _status = ds_map_find_value(_map, "status");
+    if (_status > 0)
+    {
+        // status=1 is a progress notification, not a failed or completed reply.
+        qqm_req_life = 0;
+        return;
+    }
     var _kind = qqm_kind;
+    var _source = qqm_req_source;
     qqm_req = -1;
     qqm_kind = "";
     qqm_req_life = 0;
     qqm_loading = 0;
 
-    var _status = ds_map_find_value(_map, "status");
-    if (_status != 0)
+    var _is_ui = (_kind == "status" || _kind == "playlists"
+                  || _kind == "playlist" || _kind == "search");
+    if (_is_ui && (_source != qqm_source
+        || (qqm_lists_pending == 1 && (_kind == "search" || _kind == "playlist"))))
+    {
+        // The listener switched services while this reply was in flight.
+        qqm_try_load_lists();
+        return;
+    }
+    if (_status < 0)
     {
         qqm_status = qqm_text("offline");
         qqm_ready = -1;
@@ -817,21 +886,40 @@ qqm_async_body = function(_map)
         return;
     }
     qqm_ready = 1;
+    if (_is_ui && variable_struct_exists(_j, "ok") && !_j.ok)
+    {
+        qqm_status = variable_struct_exists(_j, "msg") ? string(_j.msg) : qqm_text("failed");
+        return;
+    }
 
     switch (_kind)
     {
         case "status":
             qqm_ready = 1;
-            qqm_logged = _j.logged_in;
-            qqm_saw_status = 1;
+            // /status is a cheap bridge-health check; its login belongs to QQ.
+            if (_source == "qq")
+            {
+                qqm_logged = _j.logged_in;
+                qqm_saw_status = 1;
+            }
             qqm_ffmpeg = _j.ffmpeg;
-            qqm_get("/playlists", "playlists");
+            if (qqm_open == 1)
+            {
+                qqm_lists_pending = 1;
+                qqm_try_load_lists();
+            }
             break;
 
         case "playlists":
             qqm_playlists = _j.playlists;
+            if (variable_struct_exists(_j, "logged_in"))
+            {
+                qqm_logged = _j.logged_in;
+                qqm_saw_status = 1;
+            }
             qqm_view = 0;
             qqm_scroll = 0;
+            qqm_status = "";
             break;
 
         case "search":
@@ -1235,6 +1323,7 @@ qqm_draw_tabs = function()
         if (button_click(30, 365, 106, 389))
         {
             qqm_open = 0;
+            qqm_lists_pending = 0;
             qqm_search_focus = 0;
             keyboard_string = "";
         }
@@ -1261,35 +1350,7 @@ qqm_draw_tabs = function()
             draw_set_alpha(1);
             if (button_click(_x0, 365, _x1, 389))
             {
-                qqm_open = 1;
-                // coming back from 播放列表 leaves qqm_view on the queue page,
-                // which would show the queue inside the service tab - go back
-                // to the list view instead, so the playlists appear right away
-                if (qqm_view == 3)
-                {
-                    qqm_view = 0;
-                    qqm_scroll = 0;
-                    qqm_search_focus = 0;
-                    keyboard_string = "";
-                }
-                if (qqm_source != _src)
-                {
-                    // switching service: every list belongs to the old one, so
-                    // clear them all - songs *and* playlists
-                    qqm_source = _src;
-                    qqm_tracks = [];
-                    qqm_list = [];
-                    qqm_playlists = [];
-                    qqm_list_kind = "";
-                    qqm_view = 0;
-                    qqm_hovered = -1;
-                    qqm_scroll = 0;
-                }
-                if (qqm_ready == 0)
-                {
-                    qqm_status = qqm_text("loading");
-                    qqm_get("/status", "status");
-                }
+                qqm_select_source(_src);
             }
         }
         else if (qqm_open == 1 && qqm_source == _src)
@@ -1311,6 +1372,7 @@ qqm_draw_tabs = function()
         if (button_click(286, 365, 372, 389))
         {
             qqm_open = 2;
+            qqm_lists_pending = 0;
             qqm_search_focus = 0;
             keyboard_string = "";
         }

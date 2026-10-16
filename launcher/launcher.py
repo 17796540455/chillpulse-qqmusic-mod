@@ -97,10 +97,14 @@ def run(command):
         if result not in (0, 10):
             raise RuntimeError("Mod data check failed (code %d). See mod_guard.log." % result)
         game_handle = lifecycle.find_game(executable)
-        bridge = subprocess.Popen(
-            [sys.executable, str(HERE / "qqbridge.py"), "--port", str(PORT),
+        bridge_command = [sys.executable, str(HERE / "qqbridge.py"), "--port", str(PORT),
              "--game-dir", game_dir, "--cache-mb", "1024", "--quality", "128",
-             "--watch-pid", str(os.getpid())],
+             "--watch-pid", str(os.getpid())]
+        ffmpeg_config = HERE / "ffmpeg_path.txt"
+        if ffmpeg_config.exists():
+            bridge_command.extend(["--ffmpeg", ffmpeg_config.read_text(encoding="utf-8-sig").strip()])
+        bridge = subprocess.Popen(
+            bridge_command,
             cwd=str(HERE), env=lifecycle.bridge_environment(), close_fds=True,
             creationflags=subprocess.CREATE_NO_WINDOW)
         ready_bridge(bridge, game_dir)

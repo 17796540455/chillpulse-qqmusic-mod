@@ -28,7 +28,11 @@ if (string.IsNullOrEmpty(root))
 {
     root = Directory.GetCurrentDirectory();
 }
-string methodsPath = Path.Combine(root, "mods", "patch", "qqm_methods.gml");
+string methodsPath = Path.Combine(root, "mod", "qqm_methods.gml");
+if (!File.Exists(methodsPath))
+{
+    methodsPath = Path.Combine(root, "mods", "patch", "qqm_methods.gml");
+}
 if (!File.Exists(methodsPath))
 {
     throw new FileNotFoundException("Cannot find the mod GML source.", methodsPath);
