@@ -141,22 +141,32 @@ def search(keyword: str, page: int = 1, num: int = 30) -> list:
 
 
 def playlists(uid: str = "") -> list:
-    """The signed-in user's own playlists.  Needs a cookie; raises otherwise."""
+    """The signed-in user's own playlists (including 我喜欢的音乐).
+
+    The bridge hands every provider the QQ Music uin, which is meaningless
+    here - the account id always comes from our own cookie.
+    """
     if not _cookie():
         raise BridgeError("需要网易云登录")
-    if not uid:
+    account = ""
+    try:
         j = _api("/api/nuser/account/get", {})
-        uid = str((j.get("profile") or {}).get("userId") or "")
-    if not uid:
-        raise BridgeError("网易云登录已失效")
-    j = _api("/api/user/playlist", {"uid": uid, "limit": 1000, "offset": 0})
+        account = str((j.get("profile") or {}).get("userId") or "")
+    except BridgeError:
+        account = ""
+    if not account:
+        # no account endpoint answer -> the cookie is stale
+        raise BridgeError("网易云登录已失效，请重新获取 MUSIC_U")
+    j = _api("/api/user/playlist", {"uid": account, "limit": 1000, "offset": 0})
     out = []
     for p in (j.get("playlist") or []):
+        count = int(p.get("trackCount") or 0)
         out.append({
             "tid": str(p.get("id") or ""),
             "dirName": p.get("name") or "",
-            "songNum": int(p.get("trackCount") or 0),
-            "special": "fav" if p.get("specialType") == 5 else "",
+            "songNum": count,
+            # NetEase marks 我喜欢的音乐 with specialType 5, like QQ's 我喜欢
+            "special": "fav" if int(p.get("specialType") or 0) == 5 else "",
         })
     return out
 
