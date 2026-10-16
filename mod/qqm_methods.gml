@@ -1401,7 +1401,13 @@ qqm_draw_body = function()
     }
 
     // ---------------- sub row: views / search box ----------------
-    if (qqm_view == 2)
+    // 播放列表 is a top-level page of its own: no search box and no
+    // service sub tabs on it, so the whole sub row is skipped.
+    if (_queue_page)
+    {
+        // nothing to draw here
+    }
+    else if (qqm_view == 2)
     {
         draw_set_alpha(0.3);
         draw_roundrect(35, _sub_y1, 320, _sub_y2, false);
