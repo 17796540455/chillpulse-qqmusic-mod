@@ -15,6 +15,8 @@ qqm_init = function()
     qqm_req          = -1;     // id of the http request in flight
     qqm_kind         = "";     // what that request was for
     qqm_req_source   = "qq";   // source captured when the request was issued
+    qqm_req_play_generation = 0;
+    qqm_play_generation = 0;  // invalidate replies when a different selection wins
     qqm_lists_pending = 0;     // load the selected service when the channel is free
     qqm_req_life     = 0;      // step counter guarding against a lost response
 
@@ -40,6 +42,7 @@ qqm_init = function()
     qqm_play_frames  = 0;
     qqm_sound        = -1;
     qqm_voice        = -1;    // playing instance; qqm_sound is the stream resource
+    qqm_online_active = 0;    // owns the player even while loading or showing an error
     qqm_playing      = 1;
     qqm_last_mode    = music_mode;
     qqm_shuffle_ids  = [];
@@ -116,6 +119,7 @@ qqm_init = function()
         if (global.qqm_stream != -1)
         {
             qqm_sound = global.qqm_stream;
+            qqm_online_active = 1;
             qqm_voice = variable_global_exists("qqm_voice") ? global.qqm_voice : qqm_sound;
             qqm_play_state = "playing";
             qqm_play_title = "QQ音乐";
@@ -273,6 +277,10 @@ qqm_get = function(_path, _kind)
     }
     qqm_kind = _kind;
     qqm_req_source = qqm_source;
+    if (_kind == "play" || _kind == "poll")
+    {
+        qqm_req_play_generation = qqm_play_generation;
+    }
     qqm_req_life = 0;
     // List requests have to say which service they are for.  The id-carrying
     // ones (/play, /playstate, /prefetch, /status) are left alone - they carry
@@ -330,6 +338,8 @@ qqm_select_source = function(_src)
 /// @description Stop and release the current QQ stream.
 qqm_stop = function()
 {
+    qqm_online_active = 0;
+    qqm_play_generation += 1;
     if (qqm_sound != -1)
     {
         audio_stop_sound(qqm_voice);
@@ -497,6 +507,12 @@ qqm_play_from_queue = function(_i)
     }
     var _t = qqm_queue[_i];
     qqm_stop();
+    qqm_online_active = 1;
+    // Stop the cassette now, rather than letting it play during the download.
+    if (audio_is_playing(current_music))
+    {
+        audio_stop_sound(current_music);
+    }
     qqm_play_index = _i;
     qqm_play_id = string(_t.id);
     qqm_play_title = string(_t.name);
@@ -733,12 +749,11 @@ qqm_step_body = function()
     }
 
     // ---- the game's player bar drives the QQ stream while one is loaded ----
-    var _on = (qqm_sound != -1 || qqm_play_state == "preparing");
-    if (qqm_sound != -1 && current_music != qqm_saved_music
-        && audio_is_playing(current_music))
+    var _on = (qqm_online_active == 1 || qqm_sound != -1 || qqm_play_state == "preparing");
+    if (qqm_online_active == 1 && audio_is_playing(current_music))
     {
-        // the player deliberately started a local cassette (the QQ stream never
-        // changes current_music), so hand control back to the game
+        // Stock auto-starts are gated while online owns the player. A cassette
+        // playing now was explicitly selected, even if it is the same asset.
         qqm_stop();
         _on = false;
     }
@@ -950,10 +965,18 @@ qqm_async_body = function(_map)
     }
     var _kind = qqm_kind;
     var _source = qqm_req_source;
+    var _stale_play = ((_kind == "play" || _kind == "poll")
+                      && qqm_req_play_generation != qqm_play_generation);
     qqm_req = -1;
     qqm_kind = "";
     qqm_req_life = 0;
     qqm_loading = 0;
+    if (_stale_play)
+    {
+        // A rapid skip or local takeover superseded this playback request.
+        qqm_try_send_play();
+        return;
+    }
 
     var _is_ui = (_kind == "status" || _kind == "playlists"
                   || _kind == "playlist" || _kind == "search");
@@ -1102,7 +1125,7 @@ qqm_async_body = function(_map)
     }
 };
 
-/// @description Report a failed play request and clear the pending selection.
+/// @description Report failure while retaining the selected queue position.
 qqm_fail_play = function(_msg)
 {
     if (qqm_play_id != "")
@@ -1112,11 +1135,7 @@ qqm_fail_play = function(_msg)
     qqm_play_state = "";
     qqm_pending_play = -1;
     qqm_status = string(_msg);
-    qqm_play_title = "";
-    qqm_play_singer = "";
-    qqm_play_id = "";
     qqm_play_file = "";
-    qqm_play_index = -1;
 };
 
 /// @description Mark the first-run self test as done so it never runs again.
@@ -1138,6 +1157,7 @@ qqm_demo_finish = function()
 /// @description Load the prepared ogg file and start it on the game's player.
 qqm_start_stream = function(_file)
 {
+    qqm_online_active = 1;
     if (qqm_sound != -1)
     {
         audio_stop_sound(qqm_voice);

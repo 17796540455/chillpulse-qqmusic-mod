@@ -71,17 +71,24 @@ group.QueueAppend(cStep, "qqm_step();");
 group.QueueAppend(cDraw, "qqm_draw();");
 group.QueueAppend(cOther, "qqm_async(async_load);");
 
-// --- 3. let the QQ stream own the stock player while it is loaded ----------
+// --- 3. online ownership includes downloading and failed selections --------
 //     (prev / next / play-pause handlers)
 group.QueueFindReplace(cStep,
     "ms_click && array_length(music_names) > 0 && !page_customization",
-    "ms_click && array_length(music_names) > 0 && !page_customization && qqm_sound == -1",
+    "ms_click && array_length(music_names) > 0 && !page_customization && qqm_sound == -1 && qqm_online_active == 0",
     false);
 
 //     (the stock auto-advance must not fight the QQ stream)
 group.QueueFindReplace(cStep,
     "if (audio_is_playing(current_music) == false && array_length(music_list) > 0)",
-    "if (audio_is_playing(current_music) == false && array_length(music_list) > 0 && qqm_sound == -1)",
+    "if (audio_is_playing(current_music) == false && array_length(music_list) > 0 && qqm_sound == -1 && qqm_online_active == 0)",
+    false);
+
+// First-time scene unlocks can also start a cassette from the Step event.
+// Explicit cassette selections in Draw remain available to return to local music.
+group.QueueFindReplace(cStep,
+    "audio_play_sound(current_music, 99, false);",
+    "if (qqm_online_active == 0) { audio_play_sound(current_music, 99, false); }",
     false);
 
 // --- 4. music panel: the QQ tab replaces the cassette list body ------------

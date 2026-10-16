@@ -18,6 +18,7 @@ function fixture() {
     qqm_base:'http://127.0.0.1:38612',qqm_status:'',qqm_loading:0,
     qqm_playlists:[],qqm_tracks:[],qqm_list_kind:'',qqm_scroll:0,qqm_search_focus:0,
     qqm_play_id:'',qqm_play_state:'',qqm_sound:-1,qqm_queue:[],qqm_play_index:-1,
+    qqm_online_active:0,qqm_play_generation:0,qqm_req_play_generation:0,
     qqm_demo:0,qqm_hud_timer:-1,qqm_toast_time:0,qqm_prefetch_cd:0,qqm_prefetch_q:0,
     qqm_hover_prefetch:0,qqm_hovered:-1,qqm_hover_frames:0,
     string:String,string_copy:(s,p,n)=>s.slice(p-1,p-1+n),string_pos:(s,t)=>t.indexOf(s)+1,

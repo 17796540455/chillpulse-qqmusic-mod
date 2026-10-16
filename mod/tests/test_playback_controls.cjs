@@ -14,12 +14,13 @@ function extract(name) {
 function fixture(ids=['A','B','C','D'],current=1,mode=0) {
   const calls=[],playing=new Set([9001]),c={calls,playing,
     qqm_sound:7001,qqm_voice:9001,qqm_saved_music:10,current_music:10,
+    qqm_online_active:1,qqm_play_generation:0,qqm_req_play_generation:0,
     qqm_play_index:current,qqm_play_id:ids[current]||'',qqm_play_file:'cache/current.ogg',
     qqm_play_title:'current',qqm_play_singer:'artist',qqm_play_state:'playing',
     qqm_play_frames:0,qqm_playing:1,music_playing:1,slider_x:100,music_mode:mode,
     qqm_last_mode:mode,qqm_shuffle_ids:[],qqm_shuffle_order:[],qqm_shuffle_pos:-1,
     qqm_queue:ids.map(id=>({id,name:id,singer:''})),qqm_pending_play:-1,
-    qqm_demo:0,qqm_hud_timer:-1,qqm_toast_time:0,qqm_req:-1,
+    qqm_demo:0,qqm_hud_timer:-1,qqm_toast_time:0,qqm_req:-1,qqm_clicks:0,
     qqm_open:0,qqm_view:0,qqm_search_focus:0,
     qqm_prefetch_cd:0,qqm_prefetch_q:0,qqm_hover_prefetch:0,qqm_hovered:-1,
     qqm_hover_frames:0,qqm_prefetch_ahead:0,qqm_pf_next:999,qqm_pf_waiting:0,
@@ -53,6 +54,8 @@ function fixture(ids=['A','B','C','D'],current=1,mode=0) {
   vm.runInContext(['qqm_sync_mode','qqm_shift','qqm_step_body','qqm_start_stream','qqm_stop'].map(extract).join('\n'),c);
   return c;
 }
+module.exports = {fixture, extract};
+if (require.main === module) {
 let count=0;
 function test(name,fn){fn();count++;console.log('PASS '+name);}
 for(const [slider,gain]of [[0,0],[25,.25],[50,.5],[100,1],[-5,0],[150,1]])
@@ -163,3 +166,4 @@ test('shuffle handles selecting a different song directly',()=>{
   assert.notEqual(c.qqm_play_id,'A');assert.equal(c.qqm_shuffle_ids.length,4);
 });
 console.log(count+' playback-control checks passed');
+}

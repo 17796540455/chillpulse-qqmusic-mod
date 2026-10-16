@@ -31,7 +31,7 @@ GAME_DIR_FILE = os.path.join(HERE, "game_dir.txt")
 DEFAULT_GAME_DIR = r"E:\steam\steam\steamapps\common\ChillPulse"
 
 VANILLA_SHA256 = "853f3a5bcbe37e43fd42e814dcf313021313f8ec1723c13c744dc7e78de95c7f"
-PATCHED_SHA256 = "58b8f81ef610586985218406ce3112af986b3db34fe30dd481dfbe06a29859c4"
+PATCHED_SHA256 = "7243e0f4da68114c1bf45074ffad7d6c745202ccf41ca80c8158cdbe6ba8ffb2"
 
 
 def game_dir() -> str:
